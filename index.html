@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#0f172a" />
-  <title>경력증명 자동화 v0.1</title>
+  <title>경력증명 자동화 v0.2</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2216%22 fill=%22%230f172a%22/><path d=%22M18 15h28a4 4 0 0 1 4 4v34H14V19a4 4 0 0 1 4-4Z%22 fill=%22white%22/><path d=%22M22 25h20M22 33h20M22 41h12%22 stroke=%22%234f46e5%22 stroke-width=%224%22 stroke-linecap=%22round%22/></svg>" />
   <link rel="stylesheet" href="styles.css" />
   <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -21,8 +21,8 @@
         </div>
       </div>
       <div class="header-actions">
-        <span class="privacy-badge"><span class="dot"></span>자료는 이 브라우저에서만 처리</span>
-        <span class="version-badge">v0.1</span>
+        <span class="privacy-badge"><span class="dot"></span>외부 전송 없이 처리</span>
+        <span class="version-badge">v0.2</span>
       </div>
     </header>
 
@@ -48,12 +48,13 @@
               <button id="dropzone" class="dropzone" type="button">
                 <span class="upload-icon" aria-hidden="true">↑</span>
                 <strong>엑셀 파일을 선택하거나 여기에 놓기</strong>
-                <small>.xlsx · .xls / 서버로 전송되지 않음</small>
+                <small>.xlsx · .xls · 엑셀 파일은 외부로 전송되지 않습니다.</small>
               </button>
               <input id="file-input" type="file" accept=".xlsx,.xls" hidden />
 
-              <div class="button-row compact">
-                <button id="load-demo" class="btn secondary" type="button">임의 자료로 체험</button>
+              <div class="button-row compact wrap">
+                <button id="load-demo-general" class="btn secondary" type="button">일반 대장 체험</button>
+                <button id="load-demo-teacher" class="btn secondary" type="button">기간제교원 체험</button>
                 <button id="clear-data" class="btn ghost" type="button">자료 비우기</button>
               </div>
               <div id="upload-summary" class="upload-summary" hidden></div>
@@ -77,12 +78,16 @@
             </section>
 
             <section class="panel">
-              <div class="panel-heading">
+              <div class="panel-heading career-heading">
                 <div>
                   <span class="eyebrow">3. 발급할 경력 선택</span>
                   <h2 id="career-title">대상자를 먼저 선택해주세요</h2>
                 </div>
                 <span id="selected-count" class="count-badge">0건 선택</span>
+              </div>
+              <div class="button-row compact career-actions">
+                <button id="select-all-careers" class="btn mini secondary" type="button" disabled>정상 경력 전체 선택</button>
+                <button id="clear-careers" class="btn mini ghost" type="button" disabled>선택 해제</button>
               </div>
               <div id="career-alert" class="inline-alert" hidden></div>
               <div id="career-list" class="career-list empty-state small">
@@ -97,9 +102,24 @@
                   <h2>증명서에 들어갈 내용을 확인해주세요</h2>
                 </div>
               </div>
+
+              <div class="field-section">
+                <span class="field-caption">증명서 종류</span>
+                <div id="certificate-mode-options" class="segment-control" aria-label="증명서 종류"></div>
+              </div>
+
+              <div id="rrn-display-section" class="field-section" hidden>
+                <span class="field-caption">주민등록번호 표시 여부</span>
+                <div class="segment-control small-segment" role="radiogroup" aria-label="주민등록번호 표시 여부">
+                  <button class="segment-btn" data-rrn-display="yes" type="button">예</button>
+                  <button class="segment-btn is-active" data-rrn-display="no" type="button">아니오</button>
+                </div>
+                <p class="field-help">기본값은 아니오이며 생년월일만 표시됩니다.</p>
+              </div>
+
               <div class="form-grid two">
                 <label>성명<input id="field-name" type="text" placeholder="성명" /></label>
-                <label>생년월일<input id="field-birth" type="text" inputmode="numeric" maxlength="10" placeholder="YYYY-MM-DD" autocomplete="off" /></label>
+                <label><span id="birth-field-label">생년월일</span><input id="field-birth" type="text" inputmode="numeric" maxlength="10" placeholder="YYYY-MM-DD" autocomplete="off" /></label>
                 <label class="span-2">주소<input id="field-address" type="text" placeholder="주소를 입력해주세요" /></label>
                 <label>용도<input id="field-purpose" type="text" value="제출용" /></label>
                 <label>발급일<input id="field-issue-date" type="date" /></label>
@@ -129,96 +149,9 @@
             </div>
 
             <div id="print-area" class="paper-wrap">
-              <article id="certificate" class="certificate" aria-label="경력증명서 미리보기">
-                <h1>경 력 증 명 서</h1>
-
-                <table class="certificate-table identity-table">
-                  <tbody>
-                    <tr>
-                      <th rowspan="2" class="section-label">인적<br />사항</th>
-                      <th>성명</th>
-                      <td id="preview-name" colspan="3"></td>
-                      <th>생년월일</th>
-                      <td id="preview-birth" colspan="2"></td>
-                    </tr>
-                    <tr>
-                      <th>주소</th>
-                      <td id="preview-address" colspan="6"></td>
-                    </tr>
-                  </tbody>
-                </table>
-
-                <table class="certificate-table career-table">
-                  <colgroup>
-                    <col class="col-section" />
-                    <col class="col-date" />
-                    <col class="col-date" />
-                    <col class="col-ymd" />
-                    <col class="col-ymd" />
-                    <col class="col-ymd" />
-                    <col class="col-position" />
-                    <col class="col-department" />
-                  </colgroup>
-                  <tbody id="preview-career-table"></tbody>
-                </table>
-
-                <table class="certificate-table summary-table">
-                  <tbody>
-                    <tr>
-                      <th class="section-label">근무연한</th>
-                      <td id="preview-total-text" colspan="3"></td>
-                      <th>최종직위 또는 직급</th>
-                      <td id="preview-final-position" colspan="3"></td>
-                    </tr>
-                    <tr>
-                      <th class="section-label">퇴직사유</th>
-                      <td id="preview-retirement" colspan="7"></td>
-                    </tr>
-                  </tbody>
-                </table>
-
-                <table class="certificate-table history-table">
-                  <tbody>
-                    <tr>
-                      <th rowspan="3" class="section-label">상벌<br />사항</th>
-                      <th colspan="3">포 상</th>
-                      <th colspan="4">징 계</th>
-                    </tr>
-                    <tr>
-                      <th>연월일</th><th>종류</th><th>시행청</th>
-                      <th>연월일</th><th colspan="2">종류</th><th>시행청</th>
-                    </tr>
-                    <tr>
-                      <td></td><td id="preview-award"></td><td></td>
-                      <td></td><td id="preview-discipline" colspan="2"></td><td></td>
-                    </tr>
-                    <tr>
-                      <th rowspan="2" class="section-label">직위<br />해제</th>
-                      <th>연월일</th><th colspan="5">사 유</th><th>처분청</th>
-                    </tr>
-                    <tr>
-                      <td></td><td id="preview-suspension" colspan="5"></td><td></td>
-                    </tr>
-                    <tr>
-                      <th class="section-label">용도</th>
-                      <td id="preview-purpose" colspan="7"></td>
-                    </tr>
-                  </tbody>
-                </table>
-
-                <div class="certificate-footer">
-                  <p class="certify-text">위와 같이 경력을 증명합니다.</p>
-                  <p id="preview-issue-date" class="issue-date"></p>
-                  <p id="preview-school" class="school-name"></p>
-                  <div class="contact-box">
-                    <div><span>담당부서</span><strong id="preview-department"></strong></div>
-                    <div><span>담 당 자</span><strong id="preview-officer"></strong></div>
-                    <div><span>전화번호</span><strong id="preview-phone"></strong></div>
-                  </div>
-                </div>
-              </article>
+              <div id="certificate-pages" class="certificate-pages"></div>
             </div>
-            <p class="print-help no-print">브라우저 인쇄 창에서 ‘PDF로 저장’을 선택할 수 있습니다. 실제 직인은 출력 후 날인하는 방식입니다.</p>
+            <p class="print-help no-print">출력 버튼을 누르면 작업 화면을 제외하고 생성된 경력증명서 페이지만 인쇄됩니다.</p>
           </section>
         </div>
       </section>
@@ -228,7 +161,7 @@
           <div>
             <span class="eyebrow">대장 품질 점검</span>
             <h1>발급 전에 잘못된 자료를 먼저 찾습니다</h1>
-            <p>오류는 발급을 막고, 경고는 확인 후 사용할 수 있습니다.</p>
+            <p>오류는 발급을 막고, 확인 필요 항목은 담당자가 살펴볼 수 있습니다.</p>
           </div>
           <div class="button-row">
             <button id="ledger-upload" class="btn secondary" type="button">대장 다시 불러오기</button>
@@ -245,7 +178,7 @@
 
         <section class="panel ledger-panel">
           <div class="ledger-toolbar">
-            <label class="search-box wide"><span>⌕</span><input id="ledger-search" type="search" placeholder="성명, 직급, 부서, 오류 내용 검색" /></label>
+            <label class="search-box wide"><span>⌕</span><input id="ledger-search" type="search" placeholder="성명, 직급, 부서·과목, 오류 내용 검색" /></label>
             <select id="issue-filter" aria-label="점검 결과 필터">
               <option value="all">전체 보기</option>
               <option value="error">오류만</option>
@@ -257,7 +190,7 @@
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>상태</th><th>성명</th><th>생년월일</th><th>근무기간</th><th>직급(위)</th><th>근무부서</th><th>퇴직사유</th><th>점검 결과</th><th></th>
+                  <th>상태</th><th>성명</th><th>생년월일</th><th>근무기간</th><th>직급(위)</th><th id="ledger-extra-heading">근무부서</th><th>퇴직사유</th><th>점검 결과</th><th></th>
                 </tr>
               </thead>
               <tbody id="ledger-body">
@@ -274,7 +207,7 @@
             <div>
               <span class="eyebrow">기본값 설정</span>
               <h1>학교 정보는 한 번만 입력하세요</h1>
-              <p>이 브라우저의 로컬 저장소에만 저장됩니다.</p>
+              <p>학교 기본정보만 다음 사용을 위해 이 기기에 저장됩니다.</p>
             </div>
           </div>
           <section class="panel settings-card">
@@ -285,9 +218,9 @@
               <label>전화번호<input id="setting-phone" type="tel" placeholder="02-0000-0000" /></label>
               <label>기본 용도<input id="setting-purpose" type="text" value="제출용" /></label>
             </div>
-            <div class="setting-note">
-              <strong>개인정보 보호 기준</strong>
-              <p>실제 경력대장 파일은 GitHub 저장소에 올리지 마세요. 이 버전은 업로드한 자료를 메모리에서만 사용하며 새로고침하면 사라집니다.</p>
+            <div class="setting-note safe-note">
+              <strong>개인정보 처리 안내</strong>
+              <p>학교명, 담당부서 등 기본정보만 이 기기에 저장됩니다.<br />업로드한 경력대장과 증명서 내용은 저장하지 않습니다.</p>
             </div>
             <div class="button-row right">
               <button id="reset-settings" class="btn ghost" type="button">설정 초기화</button>
@@ -302,17 +235,18 @@
   <dialog id="edit-dialog" class="edit-dialog">
     <form method="dialog" id="edit-form">
       <div class="dialog-heading">
-        <div><span class="eyebrow">대장 바로 수정</span><h2>경력 자료 수정</h2></div>
+        <div><span class="eyebrow">대장 바로 수정</span><h2 id="edit-title">경력 자료 수정</h2></div>
         <button class="icon-button" value="cancel" aria-label="닫기">×</button>
       </div>
       <input id="edit-index" type="hidden" />
       <div class="form-grid two">
         <label>성명<input id="edit-name" type="text" required /></label>
-        <label>생년월일<input id="edit-birth" type="text" inputmode="numeric" maxlength="10" placeholder="YYYY-MM-DD" autocomplete="off" /></label>
-        <label>근무부서<input id="edit-department" type="text" /></label>
+        <label><span id="edit-id-label">생년월일</span><input id="edit-id-value" type="text" autocomplete="off" /></label>
         <label>직급(위)<input id="edit-position" type="text" /></label>
-        <label>급제<input id="edit-pay-type" type="text" /></label>
-        <label>소정근로시간<input id="edit-hours" type="text" /></label>
+        <label id="edit-department-group">근무부서<input id="edit-department" type="text" /></label>
+        <label id="edit-subject-group" hidden>과목<input id="edit-subject" type="text" /></label>
+        <label id="edit-pay-type-group">급제<input id="edit-pay-type" type="text" /></label>
+        <label id="edit-hours-group">소정근로시간<input id="edit-hours" type="text" /></label>
         <label>시작일<input id="edit-start" type="date" required /></label>
         <label>종료일<input id="edit-end" type="date" /></label>
         <label class="span-2">퇴직사유<input id="edit-retirement" type="text" /></label>

@@ -19,7 +19,7 @@
   };
 
   const DEFAULT_SETTINGS = {
-    school: '대청중학교',
+    school: '학돌고등학교',
     department: '행정실',
     officer: '',
     phone: '',

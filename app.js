@@ -5,9 +5,9 @@
     name: ['성명', '이름'],
     identity: ['생년월일 또는 주민번호', '생년월일 또는 주민등록번호', '생년월일', '주민번호', '주민등록번호', '주민번호앞자리', '생년'],
     department: ['근무부서', '부서', '근무 부서'],
-    position: ['직급(위)', '직위(급)', '직급', '직위', '직종'],
+    position: ['직급(위)', '직위(급)', '직위(직급)', '직종·직위', '직종직위', '직급', '직위', '직종'],
     subject: ['과목', '담당과목', '표시과목'],
-    payType: ['급제', '급여형태', '계약형태'],
+    payType: ['급제', '급여형태', '계약형태', '고용형태'],
     start: ['시작일', '근무시작일', '근무 시작일', '임용일'],
     end: ['종료일', '근무종료일', '근무 종료일', '퇴직일'],
     teacherStart: ['임용시작일', '임용 시작일', '계약시작일', '계약 시작일', '근무시작일', '근무 시작일'],
@@ -15,7 +15,20 @@
     period: ['기간', '근무기간'],
     retirement: ['퇴직사유', '퇴직 사유'],
     note: ['비고', '참고'],
-    hours: ['소정근로시간', '소정 근로시간', '주당근로시간', '주당 근로시간', '근로시간', '주당수업시수', '주당 수업시수']
+    hours: ['소정근로시간', '소정 근로시간', '주당근로시간', '주당 근로시간', '근로시간', '주당수업시수', '주당 수업시수'],
+    appointmentDate: ['발령일자', '발령일'],
+    affiliation: ['소속', '근무기관'],
+    roleType: ['직위구분', '강사구분'],
+    dutyType: ['담당구분', '수업구분'],
+    dutyContent: ['담당내용', '담당과목프로그램', '담당과목·프로그램', '프로그램명'],
+    weeklyHours: ['주당수업시간', '주당 수업시간', '주당시수', '주당 수업시수'],
+    totalWeeks: ['총주수', '총 주수', '총수업주수'],
+    vacationExcluded: ['방학기간 제외', '방학기간제외', '방학 제외'],
+    workTime: ['근무시간', '수업시간', '요일교시'],
+    appointmentBasis: ['발령근거', '발령 근거'],
+    appointmentText: ['발령사항 직접입력', '발령사항', '발령 사항'],
+    ledgerNote: ['발령대장 비고', '발령대장비고'],
+    checkMemo: ['확인메모', '확인 메모']
   };
 
   const DEFAULT_SETTINGS = {
@@ -41,6 +54,17 @@
     { position: '기간제교사', subject: '수학', name: '종료확인', identity: '1988-07-07', start: '2024-03-01', end: '' },
     { position: '기간제교사', subject: '영어', name: '기간오류', identity: '1991-09-09', start: '2025-03-01', end: '2025-02-28' }
   ];
+
+  const INSTRUCTOR_DEMO_ROWS = [
+    { roleType: '시간강사', dutyType: '교과', dutyContent: '음악과', name: '강하늘', identity: '1990-01-01', start: '2020-03-02', end: '2021-02-02', weeklyHours: 6, totalWeeks: 34, vacationExcluded: '아니오', workTime: '' },
+    { roleType: '시간강사', dutyType: '교과', dutyContent: '음악과', name: '강하늘', identity: '900101-1234567', start: '2021-03-02', end: '2022-02-09', weeklyHours: 9, totalWeeks: 35, vacationExcluded: '아니오', workTime: '' },
+    { roleType: '시간강사', dutyType: '프로그램', dutyContent: '치어리딩', name: '윤별빛', identity: '1992-04-18', start: '2017-03-03', end: '2018-01-31', weeklyHours: 2, totalWeeks: '', vacationExcluded: '예', workTime: '' },
+    { roleType: '시간강사', dutyType: '프로그램', dutyContent: '스포츠6+자유2', name: '정다온', identity: '1988-08-21', start: '2018-03-01', end: '2018-07-20', weeklyHours: 8, totalWeeks: '', vacationExcluded: '아니오', workTime: '' },
+    { roleType: '전문강사', dutyType: '교과', dutyContent: '영어', name: '이새봄', identity: '1985-12-12', start: '2024-03-01', end: '2025-02-28', weeklyHours: 12, totalWeeks: '', vacationExcluded: '아니오', workTime: '월·수·금' }
+  ];
+
+  const INSTRUCTOR_ROLE_VALUES = ['시간강사', '전문강사'];
+  const INSTRUCTOR_DUTY_VALUES = ['교과', '프로그램', '부서'];
 
   const state = {
     records: [],
@@ -267,6 +291,14 @@
       loadRows(TEACHER_DEMO_ROWS, '임의자료_기간제교원대장.xlsx', 'teacher');
       toast('기간제교원 임의 자료를 불러왔습니다.');
     });
+    $('load-demo-instructor').addEventListener('click', () => {
+      loadRows(INSTRUCTOR_DEMO_ROWS, '임의자료_시간강사전문강사대장.xlsx', 'instructor');
+      toast('시간강사·전문강사 임의 자료를 불러왔습니다.');
+    });
+    document.addEventListener('click', event => {
+      const details = document.querySelector('.template-download');
+      if (details?.open && !details.contains(event.target)) details.open = false;
+    });
     $('clear-data').addEventListener('click', clearData);
   }
 
@@ -305,7 +337,7 @@
       const button = event.target.closest('[data-certificate-mode]');
       if (!button) return;
       const mode = button.dataset.certificateMode;
-      if (state.ledgerType === 'teacher' && mode !== 'teacher') return;
+      if (['teacher', 'instructor'].includes(state.ledgerType) && mode !== state.ledgerType) return;
       state.certificateMode = mode;
       renderCertificateModeOptions();
       renderCareers();
@@ -397,7 +429,25 @@
         updated.department = '';
         updated.payType = '';
         updated.hours = '';
-        if (!updated.retirement) updated.retirement = '계약기간 만료';
+        if (!updated.retirement && updated.endDate) updated.retirement = '계약기간 만료';
+      } else if (state.ledgerType === 'instructor') {
+        updated.roleType = $('edit-instructor-role').value;
+        updated.position = updated.roleType;
+        updated.dutyTypeRaw = $('edit-instructor-duty-type').value;
+        updated.dutyType = normalizeDutyType(updated.dutyTypeRaw);
+        updated.dutyContent = $('edit-instructor-duty-content').value.trim();
+        updated.weeklyHoursRaw = $('edit-instructor-weekly-hours').value.trim();
+        updated.weeklyHours = parseInstructorNumber(updated.weeklyHoursRaw, 'hours');
+        updated.totalWeeksRaw = $('edit-instructor-total-weeks').value.trim();
+        updated.totalWeeks = parseInstructorNumber(updated.totalWeeksRaw, 'weeks');
+        updated.vacationRaw = $('edit-instructor-vacation').value;
+        updated.vacationExcluded = parseVacationExcluded(updated.vacationRaw);
+        updated.workTime = $('edit-instructor-work-time').value.trim();
+        updated.department = '';
+        updated.subject = '';
+        updated.payType = '';
+        updated.hours = '';
+        if (!updated.retirement && updated.endDate) updated.retirement = '계약기간 만료';
       } else {
         updated.department = $('edit-department').value.trim();
         updated.payType = $('edit-pay-type').value.trim();
@@ -445,9 +495,10 @@
       const workbook = XLSX.read(buffer, { type: 'array', cellDates: false, raw: true });
       const detected = detectWorkbookLayout(workbook);
       if (!detected) throw new Error('지원하는 대장 형식을 확인할 수 없습니다. 엑셀의 열 제목을 확인해 주세요.');
-      const rows = detected.rows.map(row => detected.type === 'teacher' ? mapTeacherRow(row) : mapGeneralRow(row));
+      const mapper = detected.type === 'teacher' ? mapTeacherRow : detected.type === 'instructor' ? mapInstructorRow : mapGeneralRow;
+      const rows = detected.rows.map(mapper);
       loadRows(rows, file.name, detected.type);
-      toast(`${detected.type === 'teacher' ? '기간제교원' : '일반'} 경력대장으로 인식했습니다.`);
+      toast(`${ledgerTypeLabel(detected.type)}으로 인식했습니다.`);
     } catch (error) {
       toast(error?.message || '엑셀을 읽지 못했습니다.', true);
     }
@@ -458,20 +509,21 @@
     workbook.SheetNames.forEach(sheetName => {
       const sheet = workbook.Sheets[sheetName];
       const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true, blankrows: false });
-      const limit = Math.min(matrix.length, 12);
+      const limit = Math.min(matrix.length, 14);
       for (let rowIndex = 0; rowIndex < limit; rowIndex += 1) {
         const headers = matrix[rowIndex].map(value => text(value));
         const normalized = headers.map(normalizeHeader);
-        const teacherScore = scoreHeaders(normalized, 'teacher');
-        const generalScore = scoreHeaders(normalized, 'general');
-        const type = teacherScore > generalScore ? 'teacher' : 'general';
-        const score = Math.max(teacherScore, generalScore);
-        const threshold = type === 'teacher' ? 10 : 7;
+        const candidates = ['instructor', 'teacher', 'general'].map(type => ({ type, score: scoreHeaders(normalized, type) }));
+        candidates.sort((a, b) => b.score - a.score);
+        const candidate = candidates[0];
+        const sheetBonus = candidate.type === 'instructor' && normalizeHeader(sheetName).includes('시간강사입력') ? 3 : 0;
+        const score = candidate.score + sheetBonus;
+        const threshold = candidate.type === 'instructor' ? 12 : candidate.type === 'teacher' ? 10 : 7;
         if (score < threshold || (best && score <= best.score)) continue;
         const rows = matrix.slice(rowIndex + 1)
           .filter(row => row.some(value => text(value) !== ''))
           .map(row => Object.fromEntries(headers.map((header, index) => [header || `열${index + 1}`, row[index] ?? ''])));
-        best = { type, score, sheetName, headerRow: rowIndex, rows };
+        best = { type: candidate.type, score, sheetName, headerRow: rowIndex, rows };
       }
     });
     return best;
@@ -479,6 +531,10 @@
 
   function scoreHeaders(headers, type) {
     const has = field => HEADER_ALIASES[field].some(alias => headers.includes(normalizeHeader(alias)));
+    if (type === 'instructor') {
+      return (has('roleType') ? 3 : 0) + (has('dutyType') ? 2 : 0) + (has('dutyContent') ? 3 : 0) +
+        (has('name') ? 2 : 0) + (has('teacherStart') ? 2 : 0) + (has('teacherEnd') ? 2 : 0) + (has('weeklyHours') ? 3 : 0);
+    }
     if (type === 'teacher') {
       return (has('position') ? 2 : 0) + (has('name') ? 2 : 0) + (has('identity') ? 2 : 0) +
         (has('teacherStart') ? 2 : 0) + (has('teacherEnd') ? 2 : 0) + (has('subject') ? 1 : 0);
@@ -518,6 +574,29 @@
     };
   }
 
+  function mapInstructorRow(row) {
+    const map = normalizedRowMap(row);
+    return {
+      appointmentDate: valueFor(map, 'appointmentDate'),
+      affiliation: valueFor(map, 'affiliation'),
+      roleType: valueFor(map, 'roleType'),
+      dutyType: valueFor(map, 'dutyType'),
+      dutyContent: valueFor(map, 'dutyContent'),
+      name: valueFor(map, 'name'),
+      identity: valueFor(map, 'identity'),
+      start: valueFor(map, 'teacherStart'),
+      end: valueFor(map, 'teacherEnd'),
+      weeklyHours: valueFor(map, 'weeklyHours'),
+      totalWeeks: valueFor(map, 'totalWeeks'),
+      vacationExcluded: valueFor(map, 'vacationExcluded'),
+      workTime: valueFor(map, 'workTime'),
+      appointmentBasis: valueFor(map, 'appointmentBasis'),
+      appointmentText: valueFor(map, 'appointmentText'),
+      ledgerNote: valueFor(map, 'ledgerNote'),
+      checkMemo: valueFor(map, 'checkMemo')
+    };
+  }
+
   function normalizedRowMap(row) {
     const map = {};
     Object.entries(row).forEach(([key, value]) => { map[normalizeHeader(key)] = value; });
@@ -532,14 +611,14 @@
   function loadRows(rows, fileName, ledgerType) {
     state.fileName = fileName;
     state.ledgerType = ledgerType;
-    state.certificateMode = ledgerType === 'teacher' ? 'teacher' : 'general';
+    state.certificateMode = ['teacher', 'instructor'].includes(ledgerType) ? ledgerType : 'general';
     state.rrnDisplay = false;
     clearRrnInput();
     state.selectedPersonKey = null;
     state.selectedRecordIds.clear();
     state.records = rows
       .map((row, index) => normalizeRecord(row, index, ledgerType))
-      .filter(record => record.name || record.identityRaw || record.startRaw || record.endRaw || record.position);
+      .filter(record => record.name || record.identityRaw || record.startRaw || record.endRaw || record.position || record.dutyContent);
     analyzeRecords();
     clearIssueFields(true);
     renderAll();
@@ -550,6 +629,11 @@
     const identity = parseIdentity(identityRaw);
     const startRaw = row.start ?? row.startRaw ?? '';
     const endRaw = row.end ?? row.endRaw ?? '';
+    const weeklyHoursRaw = row.weeklyHours ?? '';
+    const totalWeeksRaw = row.totalWeeks ?? '';
+    const vacationRaw = row.vacationExcluded ?? '';
+    const isInstructor = ledgerType === 'instructor';
+    const endDate = parseDateStrict(endRaw);
     return {
       id: `record-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
       sourceIndex: index + 2,
@@ -561,16 +645,35 @@
       rrn: identity.rrn || '',
       department: ledgerType === 'general' ? text(row.department) : '',
       subject: ledgerType === 'teacher' ? text(row.subject) : '',
-      position: text(row.position),
+      position: isInstructor ? text(row.roleType) : text(row.position),
       payType: ledgerType === 'general' ? text(row.payType) : '',
       startRaw,
       endRaw,
       startDate: parseDateStrict(startRaw),
-      endDate: parseDateStrict(endRaw),
+      endDate,
       period: text(row.period),
-      retirement: ledgerType === 'teacher' ? (text(row.retirement) || '계약기간 만료') : text(row.retirement),
-      note: text(row.note),
+      retirement: ledgerType === 'teacher'
+        ? (text(row.retirement) || '계약기간 만료')
+        : isInstructor ? (endDate ? '계약기간 만료' : '') : text(row.retirement),
+      note: isInstructor ? text(row.checkMemo) : text(row.note),
       hours: ledgerType === 'general' ? text(row.hours) : '',
+      appointmentDateRaw: isInstructor ? row.appointmentDate ?? '' : '',
+      appointmentDate: isInstructor ? parseDateStrict(row.appointmentDate) : null,
+      affiliation: isInstructor ? text(row.affiliation) : '',
+      roleType: isInstructor ? text(row.roleType) : '',
+      dutyType: isInstructor ? normalizeDutyType(row.dutyType) : '',
+      dutyTypeRaw: isInstructor ? text(row.dutyType) : '',
+      dutyContent: isInstructor ? text(row.dutyContent) : '',
+      weeklyHoursRaw: isInstructor ? text(weeklyHoursRaw) : '',
+      weeklyHours: isInstructor ? parseInstructorNumber(weeklyHoursRaw, 'hours') : null,
+      totalWeeksRaw: isInstructor ? text(totalWeeksRaw) : '',
+      totalWeeks: isInstructor ? parseInstructorNumber(totalWeeksRaw, 'weeks') : null,
+      vacationRaw: isInstructor ? text(vacationRaw) : '',
+      vacationExcluded: isInstructor ? parseVacationExcluded(vacationRaw) : null,
+      workTime: isInstructor ? text(row.workTime) : '',
+      appointmentBasis: isInstructor ? text(row.appointmentBasis) : '',
+      appointmentText: isInstructor ? text(row.appointmentText) : '',
+      ledgerNote: isInstructor ? text(row.ledgerNote) : '',
       issues: []
     };
   }
@@ -578,22 +681,41 @@
   function analyzeRecords() {
     state.records.forEach(record => {
       const issues = [];
+      const isTeacher = record.ledgerType === 'teacher';
+      const isInstructor = record.ledgerType === 'instructor';
       if (!record.name) issues.push(issue('error', '성명이 비어 있습니다.'));
       if (!record.identityRaw) {
-        issues.push(issue('error', state.ledgerType === 'teacher' ? '생년월일 또는 주민등록번호가 비어 있습니다.' : '생년월일이 비어 있습니다.'));
+        issues.push(issue(isInstructor ? 'warning' : 'error', isInstructor
+          ? '생년월일 또는 주민등록번호가 없어 발급 시 직접 입력이 필요합니다.'
+          : isTeacher ? '생년월일 또는 주민등록번호가 비어 있습니다.' : '생년월일이 비어 있습니다.'));
       } else if (!record.birth) {
-        issues.push(issue('error', state.ledgerType === 'teacher' ? '생년월일 또는 주민등록번호 형식을 확인해 주세요.' : '생년월일 형식을 확인해 주세요.'));
+        issues.push(issue('error', isTeacher || isInstructor ? '생년월일 또는 주민등록번호 형식을 확인해 주세요.' : '생년월일 형식을 확인해 주세요.'));
       }
       if (!record.startDate) issues.push(issue('error', record.startRaw ? '시작일을 날짜로 읽을 수 없습니다.' : '시작일이 비어 있습니다.'));
       if (!record.endDate) issues.push(issue('error', record.endRaw ? '종료일을 날짜로 읽을 수 없습니다.' : '종료일이 비어 있습니다.'));
       if (record.startDate && record.endDate && record.endDate < record.startDate) issues.push(issue('error', '종료일이 시작일보다 빠릅니다.'));
-      if (!record.position) issues.push(issue(state.ledgerType === 'teacher' ? 'error' : 'warning', '직급(위)이 비어 있습니다.'));
-      if (state.ledgerType === 'teacher' && !record.subject) issues.push(issue('warning', '과목이 비어 있습니다.'));
-      if (state.ledgerType === 'general' && !record.department) issues.push(issue('warning', '근무부서가 비어 있습니다.'));
+
+      if (isInstructor) {
+        if (!record.roleType) issues.push(issue('error', '직위구분이 비어 있습니다.'));
+        else if (!INSTRUCTOR_ROLE_VALUES.includes(record.roleType)) issues.push(issue('error', '직위구분은 시간강사 또는 전문강사로 입력해 주세요.'));
+        if (!record.dutyTypeRaw) issues.push(issue('error', '담당구분이 비어 있습니다.'));
+        else if (!INSTRUCTOR_DUTY_VALUES.includes(record.dutyType)) issues.push(issue('error', '담당구분은 교과·프로그램·부서 중 하나로 입력해 주세요.'));
+        if (!record.dutyContent) issues.push(issue('error', '담당내용이 비어 있습니다.'));
+        if (!record.weeklyHoursRaw) issues.push(issue('error', '주당수업시간이 비어 있습니다.'));
+        else if (record.weeklyHours === null) issues.push(issue('error', '주당수업시간을 숫자로 해석할 수 없습니다.'));
+        if (record.totalWeeksRaw && record.totalWeeks === null) issues.push(issue('error', '총주수를 숫자로 해석할 수 없습니다.'));
+        if (record.vacationRaw && record.vacationExcluded === null) issues.push(issue('error', '방학기간 제외 값을 예 또는 아니오로 확인해 주세요.'));
+        if (record.appointmentDateRaw && !record.appointmentDate) issues.push(issue('warning', '발령일자를 날짜로 읽을 수 없습니다.'));
+        if (record.note) issues.push(issue('warning', `상세 확인 필요: ${record.note}`));
+      } else {
+        if (!record.position) issues.push(issue(isTeacher ? 'error' : 'warning', '직급(위)이 비어 있습니다.'));
+        if (isTeacher && !record.subject) issues.push(issue('warning', '과목이 비어 있습니다.'));
+        if (record.ledgerType === 'general' && !record.department) issues.push(issue('warning', '근무부서가 비어 있습니다.'));
+      }
       record.issues = issues;
     });
 
-    const groups = groupBy(state.records.filter(record => record.name), personKey);
+    const groups = groupRecordsByPerson(state.records.filter(record => record.name));
     Object.values(groups).forEach(records => {
       const valid = records.filter(record => record.startDate && record.endDate).sort((a, b) => a.startDate - b.startDate || a.endDate - b.endDate);
       valid.forEach((record, index) => {
@@ -603,13 +725,21 @@
 
       const seen = new Map();
       records.forEach(record => {
-        const key = [record.name, record.birth, dateToInput(record.startDate), dateToInput(record.endDate), record.position, record.department, record.subject].join('|');
+        const key = [record.name, record.birth, dateToInput(record.startDate), dateToInput(record.endDate), record.position, record.department, record.subject, record.dutyType, record.dutyContent, record.weeklyHours].join('|');
         if (seen.has(key)) record.issues.push(issue('warning', `대장 ${seen.get(key).sourceIndex}행과 같은 경력으로 보입니다.`));
         else seen.set(key, record);
       });
 
       const rrns = new Set(records.map(record => record.rrn).filter(Boolean));
-      if (rrns.size > 1) records.forEach(record => record.issues.push(issue('error', '같은 성명과 생년월일에 서로 다른 주민등록번호가 입력되어 있습니다.')));
+      if (rrns.size > 1) records.forEach(record => record.issues.push(issue('error', '같은 대상자에게 서로 다른 주민등록번호가 입력되어 있습니다.')));
+    });
+
+    const identityGroups = groupBy(state.records.filter(record => record.name && record.birth), record => `${record.name}|${record.birth}`);
+    Object.values(identityGroups).forEach(records => {
+      const rrns = new Set(records.map(record => record.rrn).filter(Boolean));
+      if (rrns.size > 1) records.forEach(record => {
+        if (!record.issues.some(item => item.message.includes('서로 다른 주민등록번호'))) record.issues.push(issue('error', '같은 성명과 생년월일에 서로 다른 주민등록번호가 입력되어 있습니다.'));
+      });
     });
 
     buildPeople();
@@ -617,11 +747,11 @@
   }
 
   function buildPeople() {
-    const groups = groupBy(state.records.filter(record => record.name), personKey);
+    const groups = groupRecordsByPerson(state.records.filter(record => record.name));
     state.people = Object.entries(groups).map(([key, records]) => ({
       key,
       name: records[0].name,
-      birth: records[0].birth,
+      birth: records.find(record => record.birth)?.birth || '',
       rrn: records.find(record => record.rrn)?.rrn || '',
       records: records.sort((a, b) => dateValue(a.startDate) - dateValue(b.startDate)),
       errorCount: records.reduce((sum, record) => sum + record.issues.filter(item => item.level === 'error').length, 0),
@@ -655,18 +785,21 @@
     }
     const errors = countIssues('error');
     const warnings = countIssues('warning');
-    const typeName = state.ledgerType === 'teacher' ? '기간제교원 대장' : '일반 경력대장';
+    const typeName = ledgerTypeShortLabel(state.ledgerType);
+    const badgeClass = state.ledgerType === 'teacher' ? 'teacher' : state.ledgerType === 'instructor' ? 'instructor' : '';
     els.fileState.textContent = '불러옴';
     els.fileState.className = 'state-chip ready';
     els.uploadSummary.hidden = false;
-    els.uploadSummary.innerHTML = `<div class="summary-line"><strong>${escapeHtml(state.fileName)}</strong><span class="type-badge ${state.ledgerType === 'teacher' ? 'teacher' : ''}">${typeName}</span></div>${state.people.length}명 · 경력 ${state.records.length}건 · 오류 ${errors}건 · 확인 필요 ${warnings}건`;
+    els.uploadSummary.innerHTML = `<div class="summary-line"><strong>${escapeHtml(state.fileName)}</strong><span class="type-badge ${badgeClass}">${typeName}</span></div>${state.people.length}명 · 경력 ${state.records.length}건 · 오류 ${errors}건 · 확인 필요 ${warnings}건`;
   }
 
   function renderCertificateModeOptions() {
     const container = $('certificate-mode-options');
     const options = state.ledgerType === 'teacher'
       ? [{ value: 'teacher', label: '기간제교원 경력증명서' }]
-      : [{ value: 'general', label: '일반 경력증명서' }, { value: 'hours', label: '소정근로시간 포함' }];
+      : state.ledgerType === 'instructor'
+        ? [{ value: 'instructor', label: '시간강사·전문강사 경력증명서' }]
+        : [{ value: 'general', label: '일반 경력증명서' }, { value: 'hours', label: '소정근로시간 포함' }];
     container.innerHTML = options.map(option => `<button class="segment-btn ${state.certificateMode === option.value ? 'is-active' : ''}" data-certificate-mode="${option.value}" type="button">${option.label}</button>`).join('');
   }
 
@@ -762,11 +895,18 @@
       const status = blocked ? ['error', '오류'] : hasWarning(record) ? ['warning', '확인 필요'] : ['clean', '정상'];
       const detail = state.ledgerType === 'teacher'
         ? `${record.position || '직위 미기재'} · ${record.subject || '과목 미기재'}`
-        : `${record.position || '직급 미기재'} · ${record.department || '부서 미기재'}`;
+        : state.ledgerType === 'instructor'
+          ? `${record.roleType || '직위 미기재'} · ${record.dutyContent || '담당내용 미기재'}`
+          : `${record.position || '직급 미기재'} · ${record.department || '부서 미기재'}`;
+      const subline = state.ledgerType === 'instructor'
+        ? [record.weeklyHours !== null ? `주당 ${formatPlainNumber(record.weeklyHours)}시간` : '', record.totalWeeks !== null ? `총 ${formatPlainNumber(record.totalWeeks)}주` : ''].filter(Boolean).join(' · ')
+        : '';
+      const vacationBadge = state.ledgerType === 'instructor' && record.vacationExcluded === true
+        ? '<span class="status-pill info">방학기간 제외</span>' : '';
       return `<label class="career-card ${state.selectedRecordIds.has(record.id) ? 'is-selected' : ''} ${blocked ? 'is-blocked' : ''}">
         <input class="career-check" type="checkbox" data-record-id="${record.id}" ${state.selectedRecordIds.has(record.id) ? 'checked' : ''} ${blocked ? 'disabled' : ''} />
-        <span class="career-info"><strong>${formatDate(record.startDate)} ~ ${formatDate(record.endDate)}</strong><span>${escapeHtml(detail)}</span></span>
-        <span class="career-badges"><span class="status-pill ${status[0]}">${status[1]}</span>${record.startDate && record.endDate && !blocked ? `<span>${formatDuration(calculateDuration(record.startDate, record.endDate))}</span>` : ''}</span>
+        <span class="career-info"><strong>${formatDate(record.startDate)} ~ ${formatDate(record.endDate)}</strong><span class="career-summary">${escapeHtml(detail)}</span>${subline ? `<span class="career-subline">${escapeHtml(subline)}</span>` : ''}</span>
+        <span class="career-badges"><span class="status-pill ${status[0]}">${status[1]}</span>${vacationBadge}${record.startDate && record.endDate && !blocked ? `<span>${formatDuration(calculateDuration(record.startDate, record.endDate))}</span>` : ''}</span>
       </label>`;
     }).join('');
     els.careerList.querySelectorAll('[data-record-id]').forEach(input => input.addEventListener('change', () => toggleRecord(input.dataset.recordId, input.checked)));
@@ -793,11 +933,11 @@
 
   function updateRetirementFromSelection() {
     const latest = [...getSelectedRecords()].sort(compareLatest).at(-1);
-    $('field-retirement').value = latest?.retirement || (state.ledgerType === 'teacher' && latest ? '계약기간 만료' : '');
+    $('field-retirement').value = latest?.retirement || (['teacher', 'instructor'].includes(state.ledgerType) && latest?.endDate ? '계약기간 만료' : '');
   }
 
   function renderLedger() {
-    $('ledger-extra-heading').textContent = state.ledgerType === 'teacher' ? '과목' : '근무부서';
+    $('ledger-extra-heading').textContent = state.ledgerType === 'teacher' ? '과목' : state.ledgerType === 'instructor' ? '담당내용' : '근무부서';
     if (!state.records.length) {
       els.ledgerBody.innerHTML = '<tr><td colspan="9" class="empty-cell">대장을 불러오면 점검 결과가 표시됩니다.</td></tr>';
       return;
@@ -806,7 +946,7 @@
     const filter = els.issueFilter.value;
     const rows = state.records.filter(record => {
       const status = hasError(record) ? 'error' : hasWarning(record) ? 'warning' : 'clean';
-      const searchable = normalizeSearch([record.name, record.birth, record.position, record.department, record.subject, record.retirement, record.note, record.issues.map(item => item.message).join(' ')].join(' '));
+      const searchable = normalizeSearch([record.name, record.birth, record.position, record.department, record.subject, record.dutyType, record.dutyContent, record.weeklyHoursRaw, record.totalWeeksRaw, record.retirement, record.note, record.issues.map(item => item.message).join(' ')].join(' '));
       return (!term || searchable.includes(term)) && (filter === 'all' || filter === status);
     });
     els.ledgerBody.innerHTML = rows.length ? rows.map(record => {
@@ -819,7 +959,7 @@
         <td>${record.birth ? escapeHtml(formatDate(parseDateStrict(record.birth))) : '-'}</td>
         <td>${formatDate(record.startDate)}<br>~ ${formatDate(record.endDate)}</td>
         <td>${escapeHtml(record.position || '-')}</td>
-        <td>${escapeHtml((state.ledgerType === 'teacher' ? record.subject : record.department) || '-')}</td>
+        <td>${escapeHtml((state.ledgerType === 'teacher' ? record.subject : state.ledgerType === 'instructor' ? formatInstructorDepartment(record) : record.department) || '-')}</td>
         <td>${escapeHtml(record.retirement || '-')}</td>
         <td class="issue-text">${issueHtml}</td>
         <td><button class="edit-row" data-edit-index="${actualIndex}" type="button">수정</button></td>
@@ -858,7 +998,11 @@
     const issueDate = parseDateStrict($('field-issue-date').value);
     const identifier = getPreviewIdentifier(person);
     const latest = [...selected].sort(compareLatest).at(-1);
-    const finalPosition = latest ? (state.ledgerType === 'teacher' && latest.subject ? `${latest.position}(${latest.subject})` : latest.position) : '';
+    const finalPosition = latest ? (
+      state.ledgerType === 'teacher' && latest.subject ? `${latest.position}(${latest.subject})`
+        : state.ledgerType === 'instructor' ? formatInstructorFinalPosition(latest)
+          : latest.position
+    ) : '';
     const firstPageRecords = selected.slice(0, capacity);
     return `<article class="certificate" aria-label="경력증명서">
       <h1>경 력 증 명 서</h1>
@@ -920,8 +1064,9 @@
 
   function buildCareerRow(record, isHours, isTeacher) {
     const duration = calculateDuration(record.startDate, record.endDate);
-    const extra = isTeacher ? record.subject : record.department;
-    return `<tr><td>${formatDate(record.startDate)}</td><td>${formatDate(record.endDate)}</td><td>${duration.years}</td><td>${duration.months}</td><td>${duration.days}</td><td>${escapeHtml(record.position)}</td><td>${escapeHtml(extra)}</td>${isHours ? `<td>${escapeHtml(record.hours)}</td>` : ''}</tr>`;
+    const position = state.ledgerType === 'instructor' ? formatInstructorPosition(record) : record.position;
+    const extra = isTeacher ? record.subject : state.ledgerType === 'instructor' ? formatInstructorDepartment(record) : record.department;
+    return `<tr><td>${formatDate(record.startDate)}</td><td>${formatDate(record.endDate)}</td><td>${duration.years}</td><td>${duration.months}</td><td>${duration.days}</td><td>${escapeHtml(position)}</td><td>${escapeHtml(extra)}</td>${isHours ? `<td>${escapeHtml(record.hours)}</td>` : ''}</tr>`;
   }
 
   function buildAppendixPage(records, pageNo, totalPages) {
@@ -1026,20 +1171,30 @@
     const record = state.records[index];
     if (!record) return;
     const teacher = state.ledgerType === 'teacher';
+    const instructor = state.ledgerType === 'instructor';
     $('edit-index').value = index;
-    $('edit-title').textContent = teacher ? '기간제교원 경력 수정' : '일반 경력 수정';
+    $('edit-title').textContent = teacher ? '기간제교원 경력 수정' : instructor ? '시간강사·전문강사 경력 수정' : '일반 경력 수정';
     $('edit-name').value = record.name;
-    $('edit-id-label').textContent = teacher ? '생년월일 또는 주민번호' : '생년월일';
+    $('edit-id-label').textContent = teacher || instructor ? '생년월일 또는 주민번호' : '생년월일';
     $('edit-id-value').value = record.rrn || record.birth || record.identityRaw;
     $('edit-position').value = record.position;
-    $('edit-department-group').hidden = teacher;
-    $('edit-pay-type-group').hidden = teacher;
-    $('edit-hours-group').hidden = teacher;
+    $('edit-position-group').hidden = instructor;
+    $('edit-department-group').hidden = teacher || instructor;
+    $('edit-pay-type-group').hidden = teacher || instructor;
+    $('edit-hours-group').hidden = teacher || instructor;
     $('edit-subject-group').hidden = !teacher;
+    qsa('[id^="edit-instructor-"][id$="-group"]').forEach(group => { group.hidden = !instructor; });
     $('edit-department').value = record.department;
     $('edit-subject').value = record.subject;
     $('edit-pay-type').value = record.payType;
     $('edit-hours').value = record.hours;
+    $('edit-instructor-role').value = record.roleType || '시간강사';
+    $('edit-instructor-duty-type').value = INSTRUCTOR_DUTY_VALUES.includes(record.dutyType) ? record.dutyType : '교과';
+    $('edit-instructor-duty-content').value = record.dutyContent || '';
+    $('edit-instructor-weekly-hours').value = record.weeklyHoursRaw || (record.weeklyHours !== null ? formatPlainNumber(record.weeklyHours) : '');
+    $('edit-instructor-total-weeks').value = record.totalWeeksRaw || (record.totalWeeks !== null ? formatPlainNumber(record.totalWeeks) : '');
+    $('edit-instructor-vacation').value = record.vacationExcluded === true ? '예' : '아니오';
+    $('edit-instructor-work-time').value = record.workTime || '';
     $('edit-start').value = record.startDate ? dateToInput(record.startDate) : safeInputDate(record.startRaw);
     $('edit-end').value = record.endDate ? dateToInput(record.endDate) : safeInputDate(record.endRaw);
     $('edit-retirement').value = record.retirement;
@@ -1055,6 +1210,8 @@
     try { await ensureXlsx(); } catch (error) { return toast(error.message, true); }
     let rows;
     let filePrefix;
+    let sheetName;
+    let widths;
     if (state.ledgerType === 'teacher') {
       rows = state.records.map(record => ({
         '직위(급)': record.position,
@@ -1065,6 +1222,32 @@
         '임용종료일': record.endDate ? formatDate(record.endDate) : displayRaw(record.endRaw)
       }));
       filePrefix = '기간제교원_경력대장_점검수정';
+      sheetName = '기간제교원_대장';
+      widths = [18, 14, 14, 24, 15, 15];
+    } else if (state.ledgerType === 'instructor') {
+      rows = state.records.map(record => ({
+        '발령일자': record.appointmentDate ? formatDate(record.appointmentDate) : displayRaw(record.appointmentDateRaw),
+        '소속': record.affiliation,
+        '직위구분': record.roleType,
+        '담당구분': record.dutyTypeRaw || record.dutyType,
+        '담당내용': record.dutyContent,
+        '성명': record.name,
+        '생년월일 또는 주민번호': record.rrn || record.birth,
+        '임용시작일': record.startDate ? formatDate(record.startDate) : displayRaw(record.startRaw),
+        '임용종료일': record.endDate ? formatDate(record.endDate) : displayRaw(record.endRaw),
+        '주당수업시간': record.weeklyHours !== null ? formatPlainNumber(record.weeklyHours) : record.weeklyHoursRaw,
+        '총주수': record.totalWeeks !== null ? formatPlainNumber(record.totalWeeks) : record.totalWeeksRaw,
+        '방학기간 제외': record.vacationExcluded === true ? '예' : record.vacationExcluded === false ? '아니오' : record.vacationRaw,
+        '근무시간': record.workTime,
+        '발령근거': record.appointmentBasis,
+        '발령사항 직접입력': record.appointmentText,
+        '발령대장 비고': record.ledgerNote,
+        '확인메모': record.note,
+        '점검결과': record.issues.map(item => `${item.level === 'error' ? '오류' : '확인'}: ${item.message}`).join(' / ')
+      }));
+      filePrefix = '시간강사_전문강사_경력대장_점검수정';
+      sheetName = '시간강사_입력';
+      widths = [14, 15, 13, 13, 22, 14, 24, 15, 15, 15, 12, 15, 24, 20, 38, 26, 30, 50];
     } else {
       rows = state.records.map(record => ({
         '성명': record.name,
@@ -1081,13 +1264,13 @@
         '점검결과': record.issues.map(item => `${item.level === 'error' ? '오류' : '확인'}: ${item.message}`).join(' / ')
       }));
       filePrefix = '경력대장_점검수정';
+      sheetName = '대장';
+      widths = [12, 14, 14, 22, 13, 14, 14, 15, 16, 38, 16, 50];
     }
     const sheet = XLSX.utils.json_to_sheet(rows);
-    sheet['!cols'] = state.ledgerType === 'teacher'
-      ? [18, 14, 14, 24, 15, 15].map(wch => ({ wch }))
-      : [12, 14, 14, 22, 13, 14, 14, 15, 16, 38, 16, 50].map(wch => ({ wch }));
+    sheet['!cols'] = widths.map(wch => ({ wch }));
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, sheet, state.ledgerType === 'teacher' ? '기간제교원_대장' : '대장');
+    XLSX.utils.book_append_sheet(workbook, sheet, sheetName);
     XLSX.writeFile(workbook, `${filePrefix}_${dateToInput(new Date()).replaceAll('-', '')}.xlsx`);
     toast('수정 대장을 내려받았습니다.');
   }
@@ -1147,7 +1330,34 @@
   }
 
   function personKey(record) {
-    return `${record.name.trim()}|${record.birth || `미확인-${record.sourceIndex}`}`;
+    if (record.rrn) return `rrn|${record.rrn.replace(/\D/g, '')}`;
+    if (record.birth) return `birth|${record.name.trim()}|${record.birth}`;
+    return `name|${record.name.trim()}`;
+  }
+
+  function groupRecordsByPerson(records) {
+    const groups = {};
+    const rrnKeysByNameBirth = new Map();
+    records.filter(record => record.rrn).forEach(record => {
+      const key = personKey(record);
+      (groups[key] ||= []).push(record);
+      const nameBirth = `${record.name.trim()}|${record.birth}`;
+      const keys = rrnKeysByNameBirth.get(nameBirth) || [];
+      if (!keys.includes(key)) keys.push(key);
+      rrnKeysByNameBirth.set(nameBirth, keys);
+    });
+    records.filter(record => !record.rrn && record.birth).forEach(record => {
+      const nameBirth = `${record.name.trim()}|${record.birth}`;
+      const rrnKeys = rrnKeysByNameBirth.get(nameBirth) || [];
+      const key = rrnKeys.length === 1 ? rrnKeys[0] : personKey(record);
+      (groups[key] ||= []).push(record);
+    });
+    records.filter(record => !record.rrn && !record.birth).forEach(record => {
+      const matchingKeys = Object.keys(groups).filter(key => groups[key][0]?.name === record.name);
+      const key = matchingKeys.length === 1 ? matchingKeys[0] : personKey(record);
+      (groups[key] ||= []).push(record);
+    });
+    return groups;
   }
 
   function hasError(record) { return record.issues.some(item => item.level === 'error'); }
@@ -1159,9 +1369,17 @@
 
   function parseIdentity(value) {
     if (value === null || value === undefined || value === '') return { kind: 'empty', birth: null, rrn: '' };
-    if (value instanceof Date || typeof value === 'number') {
+    if (value instanceof Date) {
       const birth = parseDateStrict(value);
       return { kind: birth ? 'birth' : 'invalid', birth, rrn: '' };
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      const numericText = Number.isInteger(value) ? String(value) : '';
+      if (![6, 8, 13].includes(numericText.length)) {
+        const birth = parseDateStrict(value);
+        return { kind: birth ? 'birth' : 'invalid', birth, rrn: '' };
+      }
+      value = numericText;
     }
     const raw = String(value).trim();
     const digits = raw.replace(/\D/g, '');
@@ -1173,6 +1391,15 @@
       const century = ['1', '2', '5', '6'].includes(code) ? 1900 : ['3', '4', '7', '8'].includes(code) ? 2000 : ['9', '0'].includes(code) ? 1800 : null;
       const birth = century === null ? null : strictDate(century + yearPart, month, day);
       return { kind: birth ? 'rrn' : 'invalid', birth, rrn: birth ? `${digits.slice(0, 6)}-${digits.slice(6)}` : '' };
+    }
+    if (digits.length === 6 && /^\d{6}$/.test(raw.replace(/[\s-]/g, ''))) {
+      const yy = Number(digits.slice(0, 2));
+      const month = Number(digits.slice(2, 4));
+      const day = Number(digits.slice(4, 6));
+      const currentYY = new Date().getFullYear() % 100;
+      const year = yy > currentYY ? 1900 + yy : 2000 + yy;
+      const birth = strictDate(year, month, day);
+      return { kind: birth ? 'birth' : 'invalid', birth, rrn: '' };
     }
     const birth = parseDateStrict(raw);
     return { kind: birth ? 'birth' : 'invalid', birth, rrn: '' };
@@ -1265,7 +1492,72 @@
   function pad(value) { return String(value).padStart(2, '0'); }
   function displayRaw(value) { return value instanceof Date ? formatDate(value) : String(value ?? ''); }
   function text(value) { return value === null || value === undefined ? '' : String(value).trim(); }
-  function normalizeHeader(value) { return text(value).replace(/[\s\n\r_()（）·.\-\/]/g, '').toLowerCase(); }
+
+  function ledgerTypeLabel(type) {
+    return type === 'teacher' ? '기간제교원 경력대장' : type === 'instructor' ? '시간강사·전문강사 경력대장' : '일반 경력대장';
+  }
+
+  function ledgerTypeShortLabel(type) {
+    return type === 'teacher' ? '기간제교원 대장' : type === 'instructor' ? '시간강사 경력대장' : '일반 경력대장';
+  }
+
+  function parseInstructorNumber(value) {
+    if (value === null || value === undefined || value === '') return null;
+    if (typeof value === 'number' && Number.isFinite(value)) return value > 0 ? value : null;
+    const cleaned = text(value).replace(/,/g, '');
+    const match = cleaned.match(/\d+(?:\.\d+)?/);
+    if (!match) return null;
+    const number = Number(match[0]);
+    return Number.isFinite(number) && number > 0 ? number : null;
+  }
+
+  function formatPlainNumber(value) {
+    const number = Number(value);
+    return Number.isInteger(number) ? String(number) : String(number).replace(/\.0+$/, '');
+  }
+
+  function normalizeDutyType(value) {
+    const normalized = normalizeSearch(value);
+    if (normalized === '교과' || normalized.includes('과목')) return '교과';
+    if (normalized === '프로그램' || normalized.includes('프로그램')) return '프로그램';
+    if (normalized === '부서' || normalized.includes('부서')) return '부서';
+    return text(value);
+  }
+
+  function parseVacationExcluded(value) {
+    const normalized = normalizeSearch(value).replace(/[._\-]/g, '');
+    if (!normalized || ['아니오', '아니요', 'n', 'no', '미제외'].includes(normalized)) return false;
+    if (['예', '네', 'y', 'yes', '제외', '방학기간제외', '방학제외'].includes(normalized) || normalized.includes('방학기간제외')) return true;
+    return null;
+  }
+
+  function formatInstructorPosition(record) {
+    const role = record.roleType || record.position || '시간강사';
+    const details = [];
+    if (record.weeklyHours !== null) details.push(`주당${formatPlainNumber(record.weeklyHours)}시간`);
+    if (record.totalWeeks !== null) details.push(`총${formatPlainNumber(record.totalWeeks)}주`);
+    const base = details.length ? `${role}(${details.join(', ')})` : role;
+    return record.vacationExcluded === true ? `${base}\n방학기간제외` : base;
+  }
+
+  function formatInstructorDepartment(record) {
+    const content = text(record.dutyContent);
+    if (!content) return '';
+    if (record.dutyType === '교과') return /^과목\s*[:：]/.test(content) ? content : `과목: ${content}`;
+    return content;
+  }
+
+  function formatInstructorFinalPosition(record) {
+    const role = record.roleType || record.position || '';
+    const content = text(record.dutyContent).replace(/^과목\s*[:：]\s*/, '');
+    return content ? `${role}(${content})` : role;
+  }
+  function normalizeHeader(value) {
+    return text(value)
+      .replace(/[（(][^）)]*[）)]/g, '')
+      .replace(/[\s\n\r\t_:：()（）·ㆍ.\-\/]/g, '')
+      .toLowerCase();
+  }
   function normalizeSearch(value) { return text(value).replace(/\s/g, '').toLowerCase(); }
   function groupBy(items, keyFn) { return items.reduce((groups, item) => { const key = keyFn(item); (groups[key] ||= []).push(item); return groups; }, {}); }
   function spacedSchoolName(name) { return [...text(name)].join('   '); }

@@ -383,3 +383,29 @@ button { cursor: pointer; }
   .certificate { width: 210mm !important; height: 297mm !important; min-height: 297mm !important; box-shadow: none !important; margin: 0 !important; break-after: page; page-break-after: always; }
   .certificate:last-child { break-after: auto; page-break-after: auto; }
 }
+
+/* v0.3: 기본양식 다운로드 및 시간강사 표시 */
+.type-badge.instructor { background: #f3e8ff; color: #7e22ce; }
+.template-download { position: relative; }
+.template-download > summary { list-style: none; display: inline-flex; align-items: center; justify-content: center; user-select: none; }
+.template-download > summary::-webkit-details-marker { display: none; }
+.template-download[open] > summary { border-color: #b9befa; background: var(--primary-soft); color: var(--primary-dark); }
+.template-download-menu {
+  position: absolute; left: 0; top: calc(100% + 7px); z-index: 30; width: 285px;
+  padding: 7px; border: 1px solid var(--line); border-radius: 13px; background: #fff;
+  box-shadow: 0 16px 36px rgba(15,23,42,.16);
+}
+.template-download-menu a {
+  display: block; padding: 10px 11px; border-radius: 9px; color: #344054;
+  text-decoration: none; font-size: 12px; font-weight: 750; line-height: 1.4;
+}
+.template-download-menu a:hover { background: var(--primary-soft); color: var(--primary-dark); }
+.career-info .career-summary { color: #475467; font-weight: 700; }
+.career-info .career-subline { color: var(--muted); font-size: 10.5px; }
+.status-pill.info { color: #6b21a8; background: #f3e8ff; }
+
+@media (max-width: 640px) {
+  .template-download { width: 100%; }
+  .template-download > summary { width: 100%; }
+  .template-download-menu { width: min(320px, calc(100vw - 48px)); }
+}

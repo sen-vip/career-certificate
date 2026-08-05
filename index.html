@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#0f172a" />
-  <title>경력증명 자동화 v0.2.2</title>
+  <title>경력증명 자동화 v0.3</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2216%22 fill=%22%230f172a%22/><path d=%22M18 15h28a4 4 0 0 1 4 4v34H14V19a4 4 0 0 1 4-4Z%22 fill=%22white%22/><path d=%22M22 25h20M22 33h20M22 41h12%22 stroke=%22%234f46e5%22 stroke-width=%224%22 stroke-linecap=%22round%22/></svg>" />
   <link rel="stylesheet" href="styles.css" />
   <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -22,7 +22,7 @@
       </div>
       <div class="header-actions">
         <span class="privacy-badge"><span class="dot"></span>외부 전송 없이 처리</span>
-        <span class="version-badge">v0.2.2</span>
+        <span class="version-badge">v0.3</span>
       </div>
     </header>
 
@@ -55,6 +55,15 @@
               <div class="button-row compact wrap">
                 <button id="load-demo-general" class="btn secondary" type="button">일반 대장 체험</button>
                 <button id="load-demo-teacher" class="btn secondary" type="button">기간제교원 체험</button>
+                <button id="load-demo-instructor" class="btn secondary" type="button">시간강사 체험</button>
+                <details class="template-download">
+                  <summary class="btn ghost">기본양식 받기</summary>
+                  <div class="template-download-menu" role="menu" aria-label="기본양식 다운로드">
+                    <a href="templates/교육공무직_일용직_경력대장_발령대장_기본양식_완성.xlsx" download>교육공무직·일용직 경력대장</a>
+                    <a href="templates/기간제교원_발령대장_입력출력_기본양식_완성.xlsx" download>기간제교원 발령대장</a>
+                    <a href="templates/시간강사_전문강사_발령대장_기본양식_완성.xlsx" download>시간강사·전문강사 발령대장</a>
+                  </div>
+                </details>
                 <button id="clear-data" class="btn ghost" type="button">자료 비우기</button>
               </div>
               <div id="upload-summary" class="upload-summary" hidden></div>
@@ -197,7 +206,7 @@
 
         <section class="panel ledger-panel">
           <div class="ledger-toolbar">
-            <label class="search-box wide"><span>⌕</span><input id="ledger-search" type="search" placeholder="성명, 직급, 부서·과목, 오류 내용 검색" /></label>
+            <label class="search-box wide"><span>⌕</span><input id="ledger-search" type="search" placeholder="성명, 직급, 부서·과목·프로그램, 오류 내용 검색" /></label>
             <select id="issue-filter" aria-label="점검 결과 필터">
               <option value="all">전체 보기</option>
               <option value="error">오류만</option>
@@ -261,9 +270,16 @@
       <div class="form-grid two">
         <label>성명<input id="edit-name" type="text" required /></label>
         <label><span id="edit-id-label">생년월일</span><input id="edit-id-value" type="text" autocomplete="off" /></label>
-        <label>직급(위)<input id="edit-position" type="text" /></label>
+        <label id="edit-position-group">직급(위)<input id="edit-position" type="text" /></label>
         <label id="edit-department-group">근무부서<input id="edit-department" type="text" /></label>
         <label id="edit-subject-group" hidden>과목<input id="edit-subject" type="text" /></label>
+        <label id="edit-instructor-role-group" hidden>직위구분<select id="edit-instructor-role"><option value="시간강사">시간강사</option><option value="전문강사">전문강사</option></select></label>
+        <label id="edit-instructor-duty-type-group" hidden>담당구분<select id="edit-instructor-duty-type"><option value="교과">교과</option><option value="프로그램">프로그램</option><option value="부서">부서</option></select></label>
+        <label id="edit-instructor-duty-content-group" hidden>담당내용<input id="edit-instructor-duty-content" type="text" /></label>
+        <label id="edit-instructor-weekly-hours-group" hidden>주당수업시간<input id="edit-instructor-weekly-hours" type="text" /></label>
+        <label id="edit-instructor-total-weeks-group" hidden>총주수<input id="edit-instructor-total-weeks" type="text" /></label>
+        <label id="edit-instructor-vacation-group" hidden>방학기간 제외<select id="edit-instructor-vacation"><option value="아니오">아니오</option><option value="예">예</option></select></label>
+        <label id="edit-instructor-work-time-group" class="span-2" hidden>근무시간<input id="edit-instructor-work-time" type="text" /></label>
         <label id="edit-pay-type-group">급제<input id="edit-pay-type" type="text" /></label>
         <label id="edit-hours-group">소정근로시간<input id="edit-hours" type="text" /></label>
         <label>시작일<input id="edit-start" type="date" required /></label>

@@ -59,6 +59,11 @@
   let xlsxPromise = null;
   let previewResizeObserver = null;
   let previewFitFrame = 0;
+  let previewFitScale = 1;
+  let previewScale = 1;
+  let previewZoomMode = 'fit-width';
+  const PREVIEW_MIN_SCALE = 0.25;
+  const PREVIEW_MAX_SCALE = 2;
   let toastTimer;
 
   const els = {
@@ -130,11 +135,22 @@
   function bindPreviewFit() {
     const paper = $('print-area');
     if (!paper) return;
+
     if ('ResizeObserver' in window) {
       previewResizeObserver = new ResizeObserver(() => schedulePreviewFit());
       previewResizeObserver.observe(paper);
     }
     window.addEventListener('resize', schedulePreviewFit, { passive: true });
+
+    $('preview-zoom-in')?.addEventListener('click', () => changePreviewZoom(1.12));
+    $('preview-zoom-out')?.addEventListener('click', () => changePreviewZoom(1 / 1.12));
+    $('preview-fit-width')?.addEventListener('click', () => setPreviewFitWidth());
+
+    paper.addEventListener('wheel', event => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      event.preventDefault();
+      changePreviewZoom(event.deltaY < 0 ? 1.1 : 1 / 1.1, event);
+    }, { passive: false });
   }
 
   function schedulePreviewFit() {
@@ -154,28 +170,70 @@
     const pageCount = pages.querySelectorAll('.certificate').length || 1;
     const styles = window.getComputedStyle(paper);
     const horizontalPadding = parseFloat(styles.paddingLeft) + parseFloat(styles.paddingRight);
-    const verticalPadding = parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom);
-    const availableWidth = Math.max(1, paper.clientWidth - horizontalPadding - 2);
-    const availableHeight = Math.max(1, paper.clientHeight - verticalPadding - 2);
+    const availableWidth = Math.max(1, paper.clientWidth - horizontalPadding - 4);
     const pageWidth = firstPage.offsetWidth;
     const pageHeight = firstPage.offsetHeight;
     const pagesStyle = window.getComputedStyle(pages);
     const gap = parseFloat(pagesStyle.rowGap || pagesStyle.gap) || 0;
     const unscaledHeight = pageCount * pageHeight + Math.max(0, pageCount - 1) * gap;
-    const isStacked = window.matchMedia('(max-width: 1099px)').matches;
 
-    let scale;
-    if (!isStacked && pageCount === 1) {
-      scale = Math.min(availableWidth / pageWidth, availableHeight / pageHeight, 1);
-    } else {
-      scale = Math.min(availableWidth / pageWidth, 1);
-    }
-    scale = Math.max(0.2, scale * 0.995);
+    previewFitScale = clampPreviewScale((availableWidth / pageWidth) * 0.995);
+    if (previewZoomMode === 'fit-width') previewScale = previewFitScale;
+    previewScale = clampPreviewScale(previewScale);
 
-    pages.style.setProperty('--preview-scale', scale.toFixed(4));
-    stage.style.height = `${Math.ceil(unscaledHeight * scale)}px`;
-    paper.classList.toggle('is-multipage', !isStacked && pageCount > 1);
+    pages.style.setProperty('--preview-scale', previewScale.toFixed(4));
+    stage.style.width = `${Math.ceil(pageWidth * previewScale)}px`;
+    stage.style.height = `${Math.ceil(unscaledHeight * previewScale)}px`;
+    paper.classList.toggle('is-multipage', pageCount > 1);
+    paper.classList.toggle('is-zoomed', previewScale > previewFitScale + 0.01);
     paper.dataset.pageCount = String(pageCount);
+    updatePreviewZoomControls();
+  }
+
+  function clampPreviewScale(value) {
+    return Math.min(PREVIEW_MAX_SCALE, Math.max(PREVIEW_MIN_SCALE, Number(value) || PREVIEW_MIN_SCALE));
+  }
+
+  function setPreviewFitWidth() {
+    previewZoomMode = 'fit-width';
+    previewScale = previewFitScale;
+    updatePreviewFit();
+    const paper = $('print-area');
+    if (paper) paper.scrollLeft = 0;
+  }
+
+  function changePreviewZoom(factor, wheelEvent = null) {
+    const paper = $('print-area');
+    const stage = $('preview-stage');
+    if (!paper || !stage) return;
+
+    const oldWidth = Math.max(1, stage.offsetWidth);
+    const oldHeight = Math.max(1, stage.offsetHeight);
+    const rect = paper.getBoundingClientRect();
+    const localX = wheelEvent ? wheelEvent.clientX - rect.left : paper.clientWidth / 2;
+    const localY = wheelEvent ? wheelEvent.clientY - rect.top : paper.clientHeight / 2;
+    const ratioX = (paper.scrollLeft + localX) / oldWidth;
+    const ratioY = (paper.scrollTop + localY) / oldHeight;
+
+    previewZoomMode = 'custom';
+    previewScale = clampPreviewScale(previewScale * factor);
+    updatePreviewFit();
+
+    window.requestAnimationFrame(() => {
+      paper.scrollLeft = Math.max(0, ratioX * stage.offsetWidth - localX);
+      paper.scrollTop = Math.max(0, ratioY * stage.offsetHeight - localY);
+    });
+  }
+
+  function updatePreviewZoomControls() {
+    const level = $('preview-zoom-level');
+    const fitButton = $('preview-fit-width');
+    const zoomIn = $('preview-zoom-in');
+    const zoomOut = $('preview-zoom-out');
+    if (level) level.textContent = `${Math.round(previewScale * 100)}%`;
+    if (fitButton) fitButton.classList.toggle('is-active', previewZoomMode === 'fit-width');
+    if (zoomIn) zoomIn.disabled = previewScale >= PREVIEW_MAX_SCALE - 0.001;
+    if (zoomOut) zoomOut.disabled = previewScale <= PREVIEW_MIN_SCALE + 0.001;
   }
 
   function bindUpload() {

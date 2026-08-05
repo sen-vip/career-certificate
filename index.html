@@ -138,11 +138,19 @@
 
           <section class="preview-column">
             <div class="preview-toolbar no-print">
-              <div>
-                <strong>증명서 미리보기</strong>
-                <span id="template-state">5줄 서식</span>
+              <div class="preview-heading-group">
+                <div class="preview-title-line">
+                  <strong>증명서 미리보기</strong>
+                  <span id="template-state">5줄 서식</span>
+                </div>
+                <div class="preview-zoom-controls" role="group" aria-label="미리보기 확대 축소">
+                  <button id="preview-zoom-out" class="zoom-btn" type="button" aria-label="축소" title="축소">−</button>
+                  <button id="preview-fit-width" class="zoom-fit-btn is-active" type="button" title="가로 너비에 맞추기">가로 맞춤</button>
+                  <span id="preview-zoom-level" class="zoom-level" aria-live="polite">100%</span>
+                  <button id="preview-zoom-in" class="zoom-btn" type="button" aria-label="확대" title="확대">＋</button>
+                </div>
               </div>
-              <div class="button-row compact">
+              <div class="button-row compact preview-actions">
                 <button id="reset-form" class="btn ghost" type="button">입력 초기화</button>
                 <button id="print-certificate" class="btn primary" type="button">인쇄 · PDF 저장</button>
               </div>
@@ -153,7 +161,7 @@
                 <div id="certificate-pages" class="certificate-pages"></div>
               </div>
             </div>
-            <p class="print-help no-print">출력 버튼을 누르면 작업 화면을 제외하고 생성된 경력증명서 페이지만 인쇄됩니다.</p>
+            <p class="print-help no-print">기본은 가로 너비에 맞춰 표시됩니다. Ctrl + 마우스 휠 또는 +/− 버튼으로 확대·축소할 수 있습니다.</p>
           </section>
         </div>
       </section>

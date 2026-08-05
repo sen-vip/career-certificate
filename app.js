@@ -19,7 +19,7 @@
   };
 
   const DEFAULT_SETTINGS = {
-    school: '대청중학교',
+    school: '학돌중학교',
     department: '행정실',
     officer: '',
     phone: '',
@@ -94,6 +94,7 @@
     bindUpload();
     bindFormFields();
     bindBirthInput();
+    bindRrnInput();
     bindModeControls();
     bindCareerControls();
     bindSettings();
@@ -285,6 +286,16 @@
     $('field-birth').addEventListener('input', event => {
       const formatted = formatBirthInput(event.target.value);
       if (event.target.value !== formatted) event.target.value = formatted;
+      renderRrnControls();
+      renderPreview();
+    });
+  }
+
+  function bindRrnInput() {
+    $('field-rrn').addEventListener('input', event => {
+      const formatted = formatRrnInput(event.target.value);
+      if (event.target.value !== formatted) event.target.value = formatted;
+      renderRrnControls();
       renderPreview();
     });
   }
@@ -303,6 +314,7 @@
 
     qsa('[data-rrn-display]').forEach(button => button.addEventListener('click', () => {
       state.rrnDisplay = button.dataset.rrnDisplay === 'yes';
+      if (state.rrnDisplay && !$('field-rrn').value.trim()) syncRrnInputFromSelectedPerson();
       renderRrnControls();
       renderPreview();
     }));
@@ -395,6 +407,8 @@
 
       state.records[index] = updated;
       analyzeRecords();
+      state.rrnDisplay = false;
+      clearRrnInput();
       els.editDialog.close();
       renderAll();
       toast('경력 자료를 수정했습니다.');
@@ -520,6 +534,7 @@
     state.ledgerType = ledgerType;
     state.certificateMode = ledgerType === 'teacher' ? 'teacher' : 'general';
     state.rrnDisplay = false;
+    clearRrnInput();
     state.selectedPersonKey = null;
     state.selectedRecordIds.clear();
     state.records = rows
@@ -657,8 +672,35 @@
 
   function renderRrnControls() {
     const section = $('rrn-display-section');
-    section.hidden = state.ledgerType !== 'teacher';
+    const panel = $('rrn-input-panel');
+    const status = $('rrn-input-status');
+    const input = $('field-rrn');
+    const person = getSelectedPerson();
+
+    section.hidden = state.ledgerType === 'none';
+    panel.hidden = section.hidden || !state.rrnDisplay;
     qsa('[data-rrn-display]').forEach(button => button.classList.toggle('is-active', (button.dataset.rrnDisplay === 'yes') === state.rrnDisplay));
+
+    if (panel.hidden) return;
+    status.className = 'rrn-input-status';
+    const raw = input.value.trim();
+    const parsed = parseIdentity(raw);
+    if (!person) {
+      status.textContent = '대상자를 먼저 선택해 주세요.';
+      status.classList.add('warning');
+    } else if (!raw) {
+      status.textContent = person.rrn ? '대장 자료의 주민등록번호를 불러오는 중입니다.' : '대장에 주민등록번호가 없어 직접 입력이 필요합니다.';
+      status.classList.add('warning');
+    } else if (parsed.kind !== 'rrn') {
+      status.textContent = '주민등록번호 13자리를 확인해 주세요.';
+      status.classList.add('error');
+    } else if (person.rrn && parsed.rrn === person.rrn) {
+      status.textContent = '대장 자료에 등록된 주민등록번호를 사용합니다.';
+      status.classList.add('success');
+    } else {
+      status.textContent = '직접 입력한 주민등록번호를 이번 발급에만 사용합니다.';
+      status.classList.add('success');
+    }
   }
 
   function renderPeople() {
@@ -683,11 +725,13 @@
     state.selectedPersonKey = key;
     state.selectedRecordIds.clear();
     state.rrnDisplay = false;
+    clearRrnInput();
     const person = getSelectedPerson();
     if (person) {
       person.records.filter(record => !hasError(record)).forEach(record => state.selectedRecordIds.add(record.id));
       $('field-name').value = person.name;
       $('field-birth').value = person.birth || '';
+      syncRrnInputFromSelectedPerson();
       updateRetirementFromSelection();
     }
     renderPeople();
@@ -906,8 +950,8 @@
     </article>`;
   }
 
-  function getPreviewIdentifier(person) {
-    if (state.ledgerType === 'teacher' && state.rrnDisplay) return { label: '주민등록번호', value: person?.rrn || '' };
+  function getPreviewIdentifier() {
+    if (state.rrnDisplay) return { label: '주민등록번호', value: getEffectiveRrn() };
     return { label: '생년월일', value: formatDate(parseDateStrict($('field-birth').value)) };
   }
 
@@ -918,6 +962,7 @@
     $('field-discipline').value = '해당없음';
     $('field-suspension').value = '해당없음';
     state.rrnDisplay = false;
+    clearRrnInput();
     setToday();
     updateRetirementFromSelection();
     renderRrnControls();
@@ -931,7 +976,14 @@
     if (!$('field-name').value.trim()) return { ok: false, message: '성명을 입력해 주세요.' };
     if (!parseDateStrict($('field-birth').value)) return { ok: false, message: '생년월일을 확인해 주세요.' };
     if (!parseDateStrict($('field-issue-date').value)) return { ok: false, message: '발급일을 확인해 주세요.' };
-    if (state.ledgerType === 'teacher' && state.rrnDisplay && !getSelectedPerson()?.rrn) return { ok: false, message: '이 대상자에게는 주민등록번호가 입력되어 있지 않습니다.' };
+    if (state.rrnDisplay) {
+      const rawRrn = $('field-rrn').value.trim();
+      const parsedRrn = parseIdentity(rawRrn);
+      if (!rawRrn) return { ok: false, message: '출력할 주민등록번호를 입력해 주세요.' };
+      if (parsedRrn.kind !== 'rrn') return { ok: false, message: '주민등록번호 형식을 확인해 주세요.' };
+      const birth = parseDateStrict($('field-birth').value);
+      if (birth && dateToInput(parsedRrn.birth) !== dateToInput(birth)) return { ok: false, message: '주민등록번호 앞 6자리와 생년월일이 일치하지 않습니다.' };
+    }
     if (state.certificateMode === 'hours' && selected.some(record => !record.hours)) return { ok: false, message: '선택한 경력 중 소정근로시간이 입력되지 않은 자료가 있습니다.' };
     return { ok: true };
   }
@@ -1047,6 +1099,7 @@
     state.ledgerType = 'none';
     state.certificateMode = 'general';
     state.rrnDisplay = false;
+    clearRrnInput();
     state.selectedPersonKey = null;
     state.selectedRecordIds.clear();
     clearIssueFields(true);
@@ -1058,6 +1111,7 @@
     if (clearName) {
       $('field-name').value = '';
       $('field-birth').value = '';
+      clearRrnInput();
     }
     $('field-address').value = '';
     $('field-retirement').value = '';
@@ -1066,6 +1120,22 @@
     $('field-discipline').value = '해당없음';
     $('field-suspension').value = '해당없음';
     setToday();
+  }
+
+  function syncRrnInputFromSelectedPerson() {
+    const input = $('field-rrn');
+    if (!input) return;
+    input.value = getSelectedPerson()?.rrn || '';
+  }
+
+  function clearRrnInput() {
+    const input = $('field-rrn');
+    if (input) input.value = '';
+  }
+
+  function getEffectiveRrn() {
+    const parsed = parseIdentity($('field-rrn')?.value || '');
+    return parsed.kind === 'rrn' ? parsed.rrn : '';
   }
 
   function getSelectedPerson() {
@@ -1113,6 +1183,12 @@
     if (digits.length <= 4) return digits;
     if (digits.length <= 6) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
     return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+  }
+
+  function formatRrnInput(value) {
+    const digits = String(value ?? '').replace(/\D/g, '').slice(0, 13);
+    if (digits.length <= 6) return digits;
+    return `${digits.slice(0, 6)}-${digits.slice(6)}`;
   }
 
   function parseDateStrict(value) {

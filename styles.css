@@ -241,11 +241,11 @@ button { cursor: pointer; }
 .certificate-table th { font-weight: 700; background: #fff; }
 .section-label { width: 12mm; letter-spacing: .08em; padding: 0; text-align: center; vertical-align: middle; }
 .section-label br { display: block; }
-.identity-table { margin-bottom: 0; }
+.identity-table { margin-bottom: -1px; }
 .identity-table th:nth-child(2) { width: 17mm; }
 .identity-table th:nth-child(6) { width: 21mm; }
 .identity-table td { text-align: left; padding-left: 3mm; }
-.career-table { margin-bottom: 0; }
+.career-table { margin-bottom: -1px; }
 .career-table .col-section { width: 12mm; }
 .career-table .col-date { width: 25mm; }
 .career-table .col-ymd { width: 10mm; }
@@ -260,18 +260,10 @@ button { cursor: pointer; }
 .career-table .section-label-career { line-height: 1.45; }
 .career-table tr:first-child th, .career-table tr:nth-child(2) th { height: 8.8mm; }
 .career-table tr:last-child th, .career-table tr:last-child td { height: 8mm; }
-.summary-table { margin-bottom: 0; }
+.summary-table { margin-bottom: -1px; }
 .summary-table th:nth-child(1) { width: 22mm; }
 .summary-table th:nth-child(5) { width: 39mm; }
 .history-table { margin-bottom: 0; }
-/* v0.3.1: 분리된 표 사이의 겹친 테두리가 확대/축소 시 굵게 보이는 현상 방지 */
-.career-table tr:first-child > th,
-.career-table tr:first-child > td,
-.summary-table tr:first-child > th,
-.summary-table tr:first-child > td,
-.history-table tr:first-child > th,
-.history-table tr:first-child > td { border-top: 0; }
-
 .history-table td, .history-table th { height: 8mm; padding: 1.5mm 1mm; }
 .certificate-footer { min-height: 64mm; padding-top: 11mm; padding-bottom: 2mm; text-align: center; display: flex; flex-direction: column; align-items: center; }
 .certify-text { font-size: 12pt; margin: 0 0 10mm; }
@@ -417,3 +409,45 @@ button { cursor: pointer; }
   .template-download > summary { width: 100%; }
   .template-download-menu { width: min(320px, calc(100vw - 48px)); }
 }
+
+
+/* v0.3.1: 읽기 편한 타이포그래피와 증명서 표 굵기 보정 */
+body { font-size: 15px; line-height: 1.5; }
+.brand-title { font-size: 18px; }
+.brand-subtitle { font-size: 13px; }
+.privacy-badge { font-size: 13px; }
+.version-badge { font-size: 12px; }
+.tab { font-size: 15px; }
+.panel-heading h2 { font-size: 19px; line-height: 1.35; }
+.eyebrow { font-size: 12px; }
+.state-chip, .count-badge, .type-badge { font-size: 12px; }
+.dropzone strong { font-size: 16px; }
+.dropzone small { font-size: 13px; line-height: 1.45; }
+.upload-summary { font-size: 13px; }
+.btn { font-size: 14px; padding: 11px 15px; }
+.btn.mini { font-size: 12px; padding: 8px 11px; }
+.search-box input { font-size: 14px; }
+.person-main strong { font-size: 15px; }
+.person-main small { font-size: 12.5px; }
+.person-meta { font-size: 12px; }
+.career-info strong { font-size: 14px; line-height: 1.45; }
+.career-info span { font-size: 12px; line-height: 1.45; }
+.career-info .career-subline { font-size: 11.5px; }
+.career-badges, .status-pill { font-size: 11px; }
+.empty-state p, .inline-alert { font-size: 13px; }
+.field-caption, .rrn-input-label, .form-grid label, .extra-fields summary { font-size: 13px; }
+.field-help, .rrn-input-status { font-size: 12px; }
+.rrn-privacy-help { font-size: 11.5px; }
+.segment-btn { font-size: 13px; padding: 10px 13px; }
+.preview-toolbar strong { font-size: 15px; }
+.preview-toolbar .preview-title-line span { font-size: 12px; }
+.zoom-fit-btn, .zoom-level { font-size: 11px !important; }
+.print-help { font-size: 12px; }
+.data-table { font-size: 13px; }
+.template-download-menu a { font-size: 13px; padding: 11px 12px; }
+.setting-note p { font-size: 13px; }
+.toast { font-size: 14px; }
+
+/* 시간강사 경력에서도 요약표 일부가 과하게 굵어 보이지 않도록 정규화 */
+.summary-table th { font-weight: 600; }
+.summary-table td { font-weight: 400 !important; }

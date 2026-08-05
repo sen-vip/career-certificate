@@ -241,11 +241,11 @@ button { cursor: pointer; }
 .certificate-table th { font-weight: 700; background: #fff; }
 .section-label { width: 12mm; letter-spacing: .08em; padding: 0; text-align: center; vertical-align: middle; }
 .section-label br { display: block; }
-.identity-table { margin-bottom: -1px; }
+.identity-table { margin-bottom: 0; }
 .identity-table th:nth-child(2) { width: 17mm; }
 .identity-table th:nth-child(6) { width: 21mm; }
 .identity-table td { text-align: left; padding-left: 3mm; }
-.career-table { margin-bottom: -1px; }
+.career-table { margin-bottom: 0; }
 .career-table .col-section { width: 12mm; }
 .career-table .col-date { width: 25mm; }
 .career-table .col-ymd { width: 10mm; }
@@ -260,10 +260,18 @@ button { cursor: pointer; }
 .career-table .section-label-career { line-height: 1.45; }
 .career-table tr:first-child th, .career-table tr:nth-child(2) th { height: 8.8mm; }
 .career-table tr:last-child th, .career-table tr:last-child td { height: 8mm; }
-.summary-table { margin-bottom: -1px; }
+.summary-table { margin-bottom: 0; }
 .summary-table th:nth-child(1) { width: 22mm; }
 .summary-table th:nth-child(5) { width: 39mm; }
 .history-table { margin-bottom: 0; }
+/* v0.3.1: 분리된 표 사이의 겹친 테두리가 확대/축소 시 굵게 보이는 현상 방지 */
+.career-table tr:first-child > th,
+.career-table tr:first-child > td,
+.summary-table tr:first-child > th,
+.summary-table tr:first-child > td,
+.history-table tr:first-child > th,
+.history-table tr:first-child > td { border-top: 0; }
+
 .history-table td, .history-table th { height: 8mm; padding: 1.5mm 1mm; }
 .certificate-footer { min-height: 64mm; padding-top: 11mm; padding-bottom: 2mm; text-align: center; display: flex; flex-direction: column; align-items: center; }
 .certify-text { font-size: 12pt; margin: 0 0 10mm; }

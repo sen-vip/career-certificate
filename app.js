@@ -57,6 +57,8 @@
   const $ = id => document.getElementById(id);
   const qsa = selector => [...document.querySelectorAll(selector)];
   let xlsxPromise = null;
+  let previewResizeObserver = null;
+  let previewFitFrame = 0;
   let toastTimer;
 
   const els = {
@@ -92,6 +94,7 @@
     bindSettings();
     bindLedger();
     bindEditDialog();
+    bindPreviewFit();
     setToday();
     applySettingsToInputs();
     renderAll();
@@ -120,7 +123,59 @@
       qsa('.tab').forEach(tab => tab.classList.toggle('is-active', tab === button));
       qsa('.tab-panel').forEach(panel => panel.classList.remove('is-active'));
       $(`tab-${button.dataset.tab}`).classList.add('is-active');
+      if (button.dataset.tab === 'issue') schedulePreviewFit();
     }));
+  }
+
+  function bindPreviewFit() {
+    const paper = $('print-area');
+    if (!paper) return;
+    if ('ResizeObserver' in window) {
+      previewResizeObserver = new ResizeObserver(() => schedulePreviewFit());
+      previewResizeObserver.observe(paper);
+    }
+    window.addEventListener('resize', schedulePreviewFit, { passive: true });
+  }
+
+  function schedulePreviewFit() {
+    window.cancelAnimationFrame(previewFitFrame);
+    previewFitFrame = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(updatePreviewFit);
+    });
+  }
+
+  function updatePreviewFit() {
+    const paper = $('print-area');
+    const stage = $('preview-stage');
+    const pages = $('certificate-pages');
+    const firstPage = pages?.querySelector('.certificate');
+    if (!paper || !stage || !pages || !firstPage || !paper.clientWidth) return;
+
+    const pageCount = pages.querySelectorAll('.certificate').length || 1;
+    const styles = window.getComputedStyle(paper);
+    const horizontalPadding = parseFloat(styles.paddingLeft) + parseFloat(styles.paddingRight);
+    const verticalPadding = parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom);
+    const availableWidth = Math.max(1, paper.clientWidth - horizontalPadding - 2);
+    const availableHeight = Math.max(1, paper.clientHeight - verticalPadding - 2);
+    const pageWidth = firstPage.offsetWidth;
+    const pageHeight = firstPage.offsetHeight;
+    const pagesStyle = window.getComputedStyle(pages);
+    const gap = parseFloat(pagesStyle.rowGap || pagesStyle.gap) || 0;
+    const unscaledHeight = pageCount * pageHeight + Math.max(0, pageCount - 1) * gap;
+    const isStacked = window.matchMedia('(max-width: 1099px)').matches;
+
+    let scale;
+    if (!isStacked && pageCount === 1) {
+      scale = Math.min(availableWidth / pageWidth, availableHeight / pageHeight, 1);
+    } else {
+      scale = Math.min(availableWidth / pageWidth, 1);
+    }
+    scale = Math.max(0.2, scale * 0.995);
+
+    pages.style.setProperty('--preview-scale', scale.toFixed(4));
+    stage.style.height = `${Math.ceil(unscaledHeight * scale)}px`;
+    paper.classList.toggle('is-multipage', !isStacked && pageCount > 1);
+    paper.dataset.pageCount = String(pageCount);
   }
 
   function bindUpload() {
@@ -691,6 +746,7 @@
     }
     $('certificate-pages').innerHTML = pages.join('');
     $('print-certificate').disabled = !selected.length;
+    schedulePreviewFit();
   }
 
   function buildMainCertificate(selected, capacity, total) {
@@ -839,7 +895,7 @@
     const stylesheetUrl = new URL('styles.css', document.baseURI).href;
     printDocument.open();
     printDocument.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><title></title><link rel="stylesheet" href="${stylesheetUrl}"><style>
-      @page{size:A4 portrait;margin:0}html,body{width:210mm!important;min-width:0!important;margin:0!important;padding:0!important;background:#fff!important;overflow:visible!important}.certificate-pages{display:block!important;width:210mm!important}.certificate{display:block!important;width:210mm!important;height:297mm!important;min-height:297mm!important;margin:0!important;box-shadow:none!important;break-after:page!important;page-break-after:always!important}.certificate:last-child{break-after:auto!important;page-break-after:auto!important}
+      @page{size:A4 portrait;margin:0}html,body{width:210mm!important;min-width:0!important;margin:0!important;padding:0!important;background:#fff!important;overflow:visible!important}.certificate-pages{display:block!important;position:static!important;left:auto!important;top:auto!important;width:210mm!important;height:auto!important;transform:none!important}.certificate{display:block!important;width:210mm!important;height:297mm!important;min-height:297mm!important;margin:0!important;box-shadow:none!important;break-after:page!important;page-break-after:always!important}.certificate:last-child{break-after:auto!important;page-break-after:auto!important}
     </style></head><body>${pages.outerHTML}</body></html>`);
     printDocument.close();
 

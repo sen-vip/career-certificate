@@ -60,7 +60,13 @@ button { cursor: pointer; }
 .tab-panel { display: none; }
 .tab-panel.is-active { display: block; }
 
-.issue-layout { display: grid; grid-template-columns: minmax(520px, 1fr) 760px; gap: 24px; padding: 24px 30px 50px; align-items: start; }
+.issue-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+  padding: 20px 24px 42px;
+  align-items: start;
+}
 .workspace { display: grid; gap: 16px; }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; box-shadow: 0 5px 15px rgba(15,23,42,.025); }
 .panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
@@ -153,12 +159,53 @@ button { cursor: pointer; }
 .extra-fields summary { cursor: pointer; color: #475467; font-size: 12px; font-weight: 800; }
 .details-body { margin-top: 13px; }
 
-.preview-column { position: sticky; top: 148px; min-width: 0; }
-.preview-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding: 0 3px; }
+.preview-column {
+  position: sticky;
+  top: 146px;
+  min-width: 0;
+  height: calc(100vh - 162px);
+  min-height: 560px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+.preview-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding: 0 3px; }
 .preview-toolbar strong { font-size: 14px; }
 .preview-toolbar span { margin-left: 8px; color: var(--muted); font-size: 11px; }
-.paper-wrap { padding: 22px; background: #dfe3e9; border-radius: 18px; box-shadow: var(--shadow); overflow: auto; max-height: calc(100vh - 205px); }
-.certificate-pages { display: grid; gap: 22px; width: max-content; min-width: 100%; justify-items: center; }
+.paper-wrap {
+  min-width: 0;
+  min-height: 0;
+  padding: 16px;
+  background: #dfe3e9;
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overscroll-behavior: contain;
+}
+.paper-wrap.is-multipage {
+  display: block;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.preview-stage {
+  position: relative;
+  width: 100%;
+  flex: 0 0 auto;
+}
+.certificate-pages {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  display: grid;
+  gap: 22px;
+  width: 210mm;
+  justify-items: center;
+  transform-origin: top center;
+  transform: translateX(-50%) scale(var(--preview-scale, 1));
+  will-change: transform;
+}
 .certificate {
   width: 210mm; height: 297mm; min-height: 297mm; margin: 0 auto; background: white; color: #111;
   padding: 16mm 15mm 13mm; font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
@@ -203,7 +250,7 @@ button { cursor: pointer; }
 .contact-box div:last-child { border-bottom: 0; }
 .contact-box span { border-right: 1px solid #111; height: 100%; display: grid; place-items: center; font-weight: 700; }
 .contact-box strong { padding-left: 3mm; font-weight: 400; }
-.print-help { text-align: center; color: var(--muted); font-size: 11px; margin: 12px 0 0; }
+.print-help { text-align: center; color: var(--muted); font-size: 11px; margin: 9px 0 0; }
 
 .appendix-page { padding-top: 18mm; }
 .appendix-page h1 { font-size: 20pt; margin-bottom: 8mm; }
@@ -260,13 +307,13 @@ button { cursor: pointer; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
 @media (max-width: 1350px) {
-  body { min-width: 1050px; }
-  .issue-layout { grid-template-columns: minmax(460px, 1fr) 670px; }
-  .paper-wrap { padding: 16px; }
-  .certificate { transform-origin: top center; }
+  body { min-width: 1100px; }
+  .issue-layout { gap: 16px; padding-left: 18px; padding-right: 18px; }
+  .panel { padding: 18px; }
+  .paper-wrap { padding: 12px; }
 }
 
-@media (max-width: 800px) {
+@media (max-width: 1099px) {
   body { min-width: 0; }
   .topbar { padding: 0 16px; }
   .brand-subtitle, .privacy-badge { display: none; }
@@ -274,9 +321,17 @@ button { cursor: pointer; }
   .tab { padding: 0 12px; }
   .issue-layout { display: block; padding: 16px 12px 40px; }
   .workspace { margin-bottom: 20px; }
-  .preview-column { position: static; }
+  .preview-column { position: static; height: auto; min-height: 0; display: block; }
   .preview-toolbar { align-items: flex-start; gap: 10px; }
-  .paper-wrap { border-radius: 12px; overflow-x: auto; }
+  .paper-wrap,
+  .paper-wrap.is-multipage {
+    min-height: 0;
+    padding: 12px;
+    border-radius: 12px;
+    overflow: hidden;
+    display: block;
+  }
+  .preview-stage { width: 100%; }
   .form-grid.two { grid-template-columns: 1fr; }
   .span-2 { grid-column: span 1; }
   .page-heading { padding: 24px 16px 16px; align-items: flex-start; gap: 14px; flex-direction: column; }
@@ -286,11 +341,18 @@ button { cursor: pointer; }
   .search-box.wide { min-width: 0; }
 }
 
+@media (max-width: 640px) {
+  .preview-toolbar { flex-direction: column; }
+  .preview-toolbar .button-row { width: 100%; }
+  .preview-toolbar .btn { flex: 1; }
+}
+
 @media print {
   @page { size: A4 portrait; margin: 0; }
   html, body { width: 210mm; min-width: 0; margin: 0; padding: 0; background: white; }
   .no-print, .topbar, .tabs, .workspace, .preview-toolbar, .print-help { display: none !important; }
-  .tab-panel, #tab-issue, .issue-layout, .preview-column, .paper-wrap, #print-area, .certificate-pages { display: block !important; margin: 0 !important; padding: 0 !important; width: 210mm !important; max-height: none !important; background: white !important; box-shadow: none !important; }
+  .tab-panel, #tab-issue, .issue-layout, .preview-column, .paper-wrap, #print-area, .preview-stage, .certificate-pages { display: block !important; position: static !important; margin: 0 !important; padding: 0 !important; width: 210mm !important; height: auto !important; min-height: 0 !important; max-height: none !important; background: white !important; box-shadow: none !important; overflow: visible !important; }
+  .certificate-pages { transform: none !important; }
   .certificate { width: 210mm !important; height: 297mm !important; min-height: 297mm !important; box-shadow: none !important; margin: 0 !important; break-after: page; page-break-after: always; }
   .certificate:last-child { break-after: auto; page-break-after: auto; }
 }

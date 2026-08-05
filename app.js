@@ -19,7 +19,7 @@
   };
 
   const DEFAULT_SETTINGS = {
-    school: '학돌고등학교',
+    school: '대청중학교',
     department: '행정실',
     officer: '',
     phone: '',
@@ -426,7 +426,9 @@
     try {
       await ensureXlsx();
       const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: 'array', cellDates: true, raw: true });
+      // 날짜 셀을 Date 객체로 만들면 브라우저 시간대에 따라 하루가 앞당겨질 수 있다.
+      // 일련번호 그대로 읽고 parseDateStrict에서 연·월·일만 복원한다.
+      const workbook = XLSX.read(buffer, { type: 'array', cellDates: false, raw: true });
       const detected = detectWorkbookLayout(workbook);
       if (!detected) throw new Error('지원하는 대장 형식을 확인할 수 없습니다. 엑셀의 열 제목을 확인해 주세요.');
       const rows = detected.rows.map(row => detected.type === 'teacher' ? mapTeacherRow(row) : mapGeneralRow(row));

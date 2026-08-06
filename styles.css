@@ -453,6 +453,7 @@ body { font-size: 15px; line-height: 1.5; }
 .summary-table td { font-weight: 400 !important; }
 
 /* v0.4.0: 오류 위치 바로가기와 세로형 수정 모달 */
+/* v0.4.1: 숫자 8자리 직접입력과 달력 선택을 함께 지원하는 날짜 입력 */
 body.dialog-open { overflow: hidden; }
 
 .career-card {
@@ -541,6 +542,58 @@ button.status-pill.actionable:focus-visible {
 }
 .edit-form-grid { grid-template-columns: minmax(0, 1fr); }
 .edit-form-grid .span-2 { grid-column: span 1; }
+
+.date-entry-control {
+  position: relative;
+  display: block;
+}
+.form-grid .date-entry-control > input[type="text"] {
+  padding-right: 48px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .01em;
+}
+.date-picker-button {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #344054;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+.date-picker-button:hover { background: #f2f4f7; }
+.date-picker-button:focus-visible {
+  outline: 3px solid rgba(79,70,229,.2);
+  outline-offset: 1px;
+}
+.date-picker-button svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.form-grid .native-date-picker {
+  position: absolute;
+  right: 8px;
+  bottom: 5px;
+  width: 1px;
+  height: 1px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
 .dialog-actions {
   position: relative;
   z-index: 2;

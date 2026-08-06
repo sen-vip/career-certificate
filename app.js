@@ -401,6 +401,8 @@
   }
 
   function bindEditDialog() {
+    bindEditableDateField('edit-start', 'edit-start-picker');
+    bindEditableDateField('edit-end', 'edit-end-picker');
     qsa('[data-close-edit-dialog]').forEach(button => button.addEventListener('click', () => els.editDialog.close()));
     els.editDialog.addEventListener('close', () => {
       document.body.classList.remove('dialog-open');
@@ -480,6 +482,63 @@
       els.editDialog.close();
       toast('경력 자료를 수정했습니다.');
     });
+  }
+
+  function bindEditableDateField(fieldId, pickerId) {
+    const field = $(fieldId);
+    const picker = $(pickerId);
+    const trigger = document.querySelector(`[data-date-picker-target="${fieldId}"]`);
+    if (!field || !picker || !trigger) return;
+
+    const syncPicker = () => {
+      const parsed = parseDateStrict(field.value);
+      picker.value = parsed ? dateToInput(parsed) : '';
+    };
+
+    field.addEventListener('input', () => {
+      const formatted = formatEditableDateInput(field.value);
+      if (field.value !== formatted) {
+        field.value = formatted;
+        try { field.setSelectionRange(field.value.length, field.value.length); } catch {}
+      }
+      syncPicker();
+      if (parseDateStrict(field.value)) clearEditFieldError(fieldId);
+    });
+
+    field.addEventListener('blur', () => {
+      const parsed = parseDateStrict(field.value);
+      if (!parsed) return;
+      field.value = dateToInput(parsed);
+      picker.value = field.value;
+      clearEditFieldError(fieldId);
+    });
+
+    picker.addEventListener('change', () => {
+      if (!picker.value) return;
+      field.value = picker.value;
+      clearEditFieldError(fieldId);
+      field.focus();
+    });
+
+    trigger.addEventListener('click', () => {
+      syncPicker();
+      try {
+        if (typeof picker.showPicker === 'function') picker.showPicker();
+        else picker.click();
+      } catch {
+        picker.focus();
+        picker.click();
+      }
+    });
+  }
+
+  function formatEditableDateInput(value) {
+    const parsed = parseDateStrict(value);
+    if (parsed) return dateToInput(parsed);
+    const digits = String(value ?? '').replace(/\D/g, '').slice(0, 8);
+    if (digits.length <= 4) return digits;
+    if (digits.length <= 6) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+    return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
   }
 
   function loadSettings() {
@@ -1275,6 +1334,8 @@
     $('edit-instructor-work-time').value = record.workTime || '';
     $('edit-start').value = record.startDate ? dateToInput(record.startDate) : safeInputDate(record.startRaw);
     $('edit-end').value = record.endDate ? dateToInput(record.endDate) : safeInputDate(record.endRaw);
+    $('edit-start-picker').value = $('edit-start').value;
+    $('edit-end-picker').value = $('edit-end').value;
     $('edit-retirement').value = record.retirement;
     $('edit-note').value = record.note;
     refreshEditIssues(record);
@@ -1306,6 +1367,15 @@
       field.removeAttribute('aria-describedby');
     });
     qsa('#edit-form .edit-field-message').forEach(message => message.remove());
+  }
+
+  function clearEditFieldError(fieldId) {
+    const field = $(fieldId);
+    if (!field) return;
+    field.classList.remove('is-invalid');
+    field.removeAttribute('aria-invalid');
+    field.removeAttribute('aria-describedby');
+    $(`${fieldId}-error-message`)?.remove();
   }
 
   function focusEditField(fieldId, message = '') {

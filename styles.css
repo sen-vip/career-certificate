@@ -451,3 +451,143 @@ body { font-size: 15px; line-height: 1.5; }
 /* 시간강사 경력에서도 요약표 일부가 과하게 굵어 보이지 않도록 정규화 */
 .summary-table th { font-weight: 600; }
 .summary-table td { font-weight: 400 !important; }
+
+/* v0.4.0: 오류 위치 바로가기와 세로형 수정 모달 */
+body.dialog-open { overflow: hidden; }
+
+.career-card {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+.career-select-area {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+}
+.career-card.is-blocked { opacity: 1; }
+.career-card.is-blocked .career-select-area { opacity: .7; cursor: not-allowed; }
+.career-card.is-blocked .career-badges { opacity: 1; }
+button.status-pill {
+  border: 0;
+  font-family: inherit;
+  line-height: 1.25;
+}
+button.status-pill.actionable { cursor: pointer; transition: transform .15s ease, box-shadow .15s ease; }
+button.status-pill.actionable:hover { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(15,23,42,.1); }
+button.status-pill.actionable:focus-visible {
+  outline: 3px solid rgba(79,70,229,.24);
+  outline-offset: 2px;
+}
+
+.alert-section + .alert-section { margin-top: 10px; padding-top: 10px; border-top: 1px solid currentColor; border-top-color: rgba(146,64,14,.18); }
+.inline-alert.error .alert-section + .alert-section { border-top-color: rgba(153,27,27,.16); }
+.alert-heading { display: block; margin-bottom: 4px; font-size: 12px; font-weight: 900; }
+.alert-action,
+.alert-message {
+  display: block;
+  width: 100%;
+  padding: 4px 5px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: 1.45;
+  text-align: left;
+}
+.alert-action { cursor: pointer; }
+.alert-action:hover { background: rgba(255,255,255,.55); text-decoration: underline; text-underline-offset: 2px; }
+.alert-action:focus-visible { outline: 3px solid rgba(79,70,229,.2); outline-offset: 1px; }
+.alert-more { margin: 5px 5px 0; font-size: 12px; opacity: .85; }
+
+#field-birth.attention-highlight {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(79,70,229,.16);
+  animation: applicant-field-pulse 1.4s ease;
+}
+@keyframes applicant-field-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(79,70,229,.1); }
+  45% { box-shadow: 0 0 0 7px rgba(79,70,229,.2); }
+}
+
+.edit-dialog {
+  width: min(660px, calc(100vw - 32px));
+  max-height: 90vh;
+  overflow: hidden;
+}
+.edit-dialog form {
+  padding: 0;
+  max-height: 90vh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+.dialog-heading {
+  position: relative;
+  z-index: 2;
+  margin: 0;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+}
+.dialog-body {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 24px 24px;
+  overscroll-behavior: contain;
+}
+.edit-form-grid { grid-template-columns: minmax(0, 1fr); }
+.edit-form-grid .span-2 { grid-column: span 1; }
+.dialog-actions {
+  position: relative;
+  z-index: 2;
+  margin: 0;
+  padding: 15px 24px;
+  border-top: 1px solid var(--line);
+  background: rgba(255,255,255,.98);
+  box-shadow: 0 -8px 20px rgba(15,23,42,.04);
+}
+.edit-issues { margin: 16px 0 0; }
+.edit-issue-action,
+.edit-issue-message {
+  display: block;
+  width: 100%;
+  padding: 4px 5px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: 1.45;
+  text-align: left;
+}
+.edit-issue-action { cursor: pointer; }
+.edit-issue-action:hover { background: rgba(255,255,255,.55); text-decoration: underline; text-underline-offset: 2px; }
+.edit-issue-action:focus-visible { outline: 3px solid rgba(79,70,229,.2); outline-offset: 1px; }
+.form-grid input.is-invalid,
+.form-grid textarea.is-invalid,
+.form-grid select.is-invalid {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px rgba(220,38,38,.1);
+}
+.edit-field-message {
+  margin-top: -2px;
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+@media (max-width: 640px) {
+  .career-card { grid-template-columns: minmax(0, 1fr) auto; padding: 12px; }
+  .career-badges { min-width: 58px; }
+  .edit-dialog { width: calc(100vw - 20px); max-height: 94vh; border-radius: 17px; }
+  .edit-dialog form { max-height: 94vh; }
+  .dialog-heading { padding: 18px 18px 15px; }
+  .dialog-body { padding: 17px 18px 22px; }
+  .dialog-actions { padding: 13px 18px; }
+}
+.person-meta .needs-input { color: var(--warning); font-weight: 800; }

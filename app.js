@@ -319,6 +319,7 @@
       const formatted = formatBirthInput(event.target.value);
       if (event.target.value !== formatted) event.target.value = formatted;
       renderRrnControls();
+      renderCareers();
       renderPreview();
     });
   }
@@ -400,6 +401,12 @@
   }
 
   function bindEditDialog() {
+    qsa('[data-close-edit-dialog]').forEach(button => button.addEventListener('click', () => els.editDialog.close()));
+    els.editDialog.addEventListener('close', () => {
+      document.body.classList.remove('dialog-open');
+      clearEditFieldErrors();
+    });
+
     els.editForm.addEventListener('submit', event => {
       event.preventDefault();
       const index = Number($('edit-index').value);
@@ -459,8 +466,18 @@
       analyzeRecords();
       state.rrnDisplay = false;
       clearRrnInput();
-      els.editDialog.close();
       renderAll();
+
+      const refreshed = state.records.find(record => record.id === updated.id) || state.records[index];
+      const remainingErrors = refreshed?.issues.filter(item => item.level === 'error') || [];
+      if (remainingErrors.length) {
+        refreshEditIssues(refreshed);
+        focusEditField(remainingErrors[0].field, remainingErrors[0].message);
+        toast('남은 오류를 확인해 주세요.', true);
+        return;
+      }
+
+      els.editDialog.close();
       toast('경력 자료를 수정했습니다.');
     });
   }
@@ -683,34 +700,33 @@
       const issues = [];
       const isTeacher = record.ledgerType === 'teacher';
       const isInstructor = record.ledgerType === 'instructor';
-      if (!record.name) issues.push(issue('error', '성명이 비어 있습니다.'));
-      if (!record.identityRaw) {
-        issues.push(issue(isInstructor ? 'warning' : 'error', isInstructor
-          ? '생년월일 또는 주민등록번호가 없어 발급 시 직접 입력이 필요합니다.'
-          : isTeacher ? '생년월일 또는 주민등록번호가 비어 있습니다.' : '생년월일이 비어 있습니다.'));
-      } else if (!record.birth) {
-        issues.push(issue('error', isTeacher || isInstructor ? '생년월일 또는 주민등록번호 형식을 확인해 주세요.' : '생년월일 형식을 확인해 주세요.'));
+      if (!record.name) issues.push(issue('error', '성명이 비어 있습니다.', 'edit-name'));
+
+      // 생년월일 미기재는 대장 오류로 막지 않는다.
+      // 발급 화면의 신청자 공통정보에서 한 번만 입력할 수 있다.
+      if (record.identityRaw && !record.birth) {
+        issues.push(issue('error', isTeacher || isInstructor ? '생년월일 또는 주민등록번호 형식을 확인해 주세요.' : '생년월일 형식을 확인해 주세요.', 'edit-id-value'));
       }
-      if (!record.startDate) issues.push(issue('error', record.startRaw ? '시작일을 날짜로 읽을 수 없습니다.' : '시작일이 비어 있습니다.'));
-      if (!record.endDate) issues.push(issue('error', record.endRaw ? '종료일을 날짜로 읽을 수 없습니다.' : '종료일이 비어 있습니다.'));
-      if (record.startDate && record.endDate && record.endDate < record.startDate) issues.push(issue('error', '종료일이 시작일보다 빠릅니다.'));
+      if (!record.startDate) issues.push(issue('error', record.startRaw ? '시작일을 날짜로 읽을 수 없습니다.' : '시작일이 비어 있습니다.', 'edit-start'));
+      if (!record.endDate) issues.push(issue('error', record.endRaw ? '종료일을 날짜로 읽을 수 없습니다.' : '종료일이 비어 있습니다.', 'edit-end'));
+      if (record.startDate && record.endDate && record.endDate < record.startDate) issues.push(issue('error', '종료일이 시작일보다 빠릅니다.', 'edit-end'));
 
       if (isInstructor) {
-        if (!record.roleType) issues.push(issue('error', '직위구분이 비어 있습니다.'));
-        else if (!INSTRUCTOR_ROLE_VALUES.includes(record.roleType)) issues.push(issue('error', '직위구분은 시간강사 또는 전문강사로 입력해 주세요.'));
-        if (!record.dutyTypeRaw) issues.push(issue('error', '담당구분이 비어 있습니다.'));
-        else if (!INSTRUCTOR_DUTY_VALUES.includes(record.dutyType)) issues.push(issue('error', '담당구분은 교과·프로그램·부서 중 하나로 입력해 주세요.'));
-        if (!record.dutyContent) issues.push(issue('error', '담당내용이 비어 있습니다.'));
-        if (!record.weeklyHoursRaw) issues.push(issue('error', '주당수업시간이 비어 있습니다.'));
-        else if (record.weeklyHours === null) issues.push(issue('error', '주당수업시간을 숫자로 해석할 수 없습니다.'));
-        if (record.totalWeeksRaw && record.totalWeeks === null) issues.push(issue('error', '총주수를 숫자로 해석할 수 없습니다.'));
-        if (record.vacationRaw && record.vacationExcluded === null) issues.push(issue('error', '방학기간 제외 값을 예 또는 아니오로 확인해 주세요.'));
+        if (!record.roleType) issues.push(issue('error', '직위구분이 비어 있습니다.', 'edit-instructor-role'));
+        else if (!INSTRUCTOR_ROLE_VALUES.includes(record.roleType)) issues.push(issue('error', '직위구분은 시간강사 또는 전문강사로 입력해 주세요.', 'edit-instructor-role'));
+        if (!record.dutyTypeRaw) issues.push(issue('error', '담당구분이 비어 있습니다.', 'edit-instructor-duty-type'));
+        else if (!INSTRUCTOR_DUTY_VALUES.includes(record.dutyType)) issues.push(issue('error', '담당구분은 교과·프로그램·부서 중 하나로 입력해 주세요.', 'edit-instructor-duty-type'));
+        if (!record.dutyContent) issues.push(issue('error', '담당내용이 비어 있습니다.', 'edit-instructor-duty-content'));
+        if (!record.weeklyHoursRaw) issues.push(issue('error', '주당수업시간이 비어 있습니다.', 'edit-instructor-weekly-hours'));
+        else if (record.weeklyHours === null) issues.push(issue('error', '주당수업시간을 숫자로 해석할 수 없습니다.', 'edit-instructor-weekly-hours'));
+        if (record.totalWeeksRaw && record.totalWeeks === null) issues.push(issue('error', '총주수를 숫자로 해석할 수 없습니다.', 'edit-instructor-total-weeks'));
+        if (record.vacationRaw && record.vacationExcluded === null) issues.push(issue('error', '방학기간 제외 값을 예 또는 아니오로 확인해 주세요.', 'edit-instructor-vacation'));
         if (record.appointmentDateRaw && !record.appointmentDate) issues.push(issue('warning', '발령일자를 날짜로 읽을 수 없습니다.'));
-        if (record.note) issues.push(issue('warning', `상세 확인 필요: ${record.note}`));
+        if (record.note) issues.push(issue('warning', `상세 확인 필요: ${record.note}`, 'edit-note'));
       } else {
-        if (!record.position) issues.push(issue(isTeacher ? 'error' : 'warning', '직급(위)이 비어 있습니다.'));
-        if (isTeacher && !record.subject) issues.push(issue('warning', '과목이 비어 있습니다.'));
-        if (record.ledgerType === 'general' && !record.department) issues.push(issue('warning', '근무부서가 비어 있습니다.'));
+        if (!record.position) issues.push(issue(isTeacher ? 'error' : 'warning', '직급(위)이 비어 있습니다.', 'edit-position'));
+        if (isTeacher && !record.subject) issues.push(issue('warning', '과목이 비어 있습니다.', 'edit-subject'));
+        if (record.ledgerType === 'general' && !record.department) issues.push(issue('warning', '근무부서가 비어 있습니다.', 'edit-department'));
       }
       record.issues = issues;
     });
@@ -720,25 +736,25 @@
       const valid = records.filter(record => record.startDate && record.endDate).sort((a, b) => a.startDate - b.startDate || a.endDate - b.endDate);
       valid.forEach((record, index) => {
         const previous = valid[index - 1];
-        if (previous && record.startDate <= previous.endDate) record.issues.push(issue('warning', '앞 경력과 근무기간이 겹칩니다.'));
+        if (previous && record.startDate <= previous.endDate) record.issues.push(issue('warning', '앞 경력과 근무기간이 겹칩니다.', 'edit-start'));
       });
 
       const seen = new Map();
       records.forEach(record => {
         const key = [record.name, record.birth, dateToInput(record.startDate), dateToInput(record.endDate), record.position, record.department, record.subject, record.dutyType, record.dutyContent, record.weeklyHours].join('|');
-        if (seen.has(key)) record.issues.push(issue('warning', `대장 ${seen.get(key).sourceIndex}행과 같은 경력으로 보입니다.`));
+        if (seen.has(key)) record.issues.push(issue('warning', `대장 ${seen.get(key).sourceIndex}행과 같은 경력으로 보입니다.`, 'edit-start'));
         else seen.set(key, record);
       });
 
       const rrns = new Set(records.map(record => record.rrn).filter(Boolean));
-      if (rrns.size > 1) records.forEach(record => record.issues.push(issue('error', '같은 대상자에게 서로 다른 주민등록번호가 입력되어 있습니다.')));
+      if (rrns.size > 1) records.forEach(record => record.issues.push(issue('error', '같은 대상자에게 서로 다른 주민등록번호가 입력되어 있습니다.', 'edit-id-value')));
     });
 
     const identityGroups = groupBy(state.records.filter(record => record.name && record.birth), record => `${record.name}|${record.birth}`);
     Object.values(identityGroups).forEach(records => {
       const rrns = new Set(records.map(record => record.rrn).filter(Boolean));
       if (rrns.size > 1) records.forEach(record => {
-        if (!record.issues.some(item => item.message.includes('서로 다른 주민등록번호'))) record.issues.push(issue('error', '같은 성명과 생년월일에 서로 다른 주민등록번호가 입력되어 있습니다.'));
+        if (!record.issues.some(item => item.message.includes('서로 다른 주민등록번호'))) record.issues.push(issue('error', '같은 성명과 생년월일에 서로 다른 주민등록번호가 입력되어 있습니다.', 'edit-id-value'));
       });
     });
 
@@ -848,8 +864,8 @@
     els.personList.className = 'person-list';
     els.personList.innerHTML = people.length ? people.map(person => `
       <button class="person-card ${person.key === state.selectedPersonKey ? 'is-active' : ''}" data-person-key="${escapeAttr(person.key)}" type="button">
-        <span class="person-main"><strong>${escapeHtml(person.name)}</strong><small>${person.birth ? formatDate(parseDateStrict(person.birth)) : '생년월일 확인 필요'}</small></span>
-        <span class="person-meta">경력 ${person.records.length}건<br>${person.errorCount ? `<span class="has-error">오류 ${person.errorCount}</span>` : person.warningCount ? `확인 ${person.warningCount}` : '정상'}</span>
+        <span class="person-main"><strong>${escapeHtml(person.name)}</strong><small>${person.birth ? formatDate(parseDateStrict(person.birth)) : '생년월일 직접 입력'}</small></span>
+        <span class="person-meta">경력 ${person.records.length}건<br>${person.errorCount ? `<span class="has-error">오류 ${person.errorCount}</span>` : person.warningCount ? `확인 ${person.warningCount}` : !person.birth ? '<span class="needs-input">입력 필요</span>' : '정상'}</span>
       </button>`).join('') : '<div class="empty-state small"><p>검색 결과가 없습니다.</p></div>';
     els.personList.querySelectorAll('[data-person-key]').forEach(button => button.addEventListener('click', () => selectPerson(button.dataset.personKey)));
   }
@@ -903,25 +919,86 @@
         : '';
       const vacationBadge = state.ledgerType === 'instructor' && record.vacationExcluded === true
         ? '<span class="status-pill info">방학기간 제외</span>' : '';
-      return `<label class="career-card ${state.selectedRecordIds.has(record.id) ? 'is-selected' : ''} ${blocked ? 'is-blocked' : ''}">
-        <input class="career-check" type="checkbox" data-record-id="${record.id}" ${state.selectedRecordIds.has(record.id) ? 'checked' : ''} ${blocked ? 'disabled' : ''} />
-        <span class="career-info"><strong>${formatDate(record.startDate)} ~ ${formatDate(record.endDate)}</strong><span class="career-summary">${escapeHtml(detail)}</span>${subline ? `<span class="career-subline">${escapeHtml(subline)}</span>` : ''}</span>
-        <span class="career-badges"><span class="status-pill ${status[0]}">${status[1]}</span>${vacationBadge}${record.startDate && record.endDate && !blocked ? `<span>${formatDuration(calculateDuration(record.startDate, record.endDate))}</span>` : ''}</span>
-      </label>`;
+      const firstIssue = record.issues.find(item => item.level === 'error') || record.issues[0];
+      const statusControl = firstIssue
+        ? `<button class="status-pill ${status[0]} actionable" data-open-record-id="${escapeAttr(record.id)}" data-focus-field="${escapeAttr(firstIssue.field || '')}" type="button" aria-label="${escapeAttr(`${formatRecordPeriod(record)} ${status[1]} 수정`)}">${status[1]}</button>`
+        : `<span class="status-pill ${status[0]}">${status[1]}</span>`;
+      return `<div class="career-card ${state.selectedRecordIds.has(record.id) ? 'is-selected' : ''} ${blocked ? 'is-blocked' : ''}">
+        <label class="career-select-area">
+          <input class="career-check" type="checkbox" data-record-id="${escapeAttr(record.id)}" ${state.selectedRecordIds.has(record.id) ? 'checked' : ''} ${blocked ? 'disabled' : ''} />
+          <span class="career-info"><strong>${formatDate(record.startDate)} ~ ${formatDate(record.endDate)}</strong><span class="career-summary">${escapeHtml(detail)}</span>${subline ? `<span class="career-subline">${escapeHtml(subline)}</span>` : ''}</span>
+        </label>
+        <span class="career-badges">${statusControl}${vacationBadge}${record.startDate && record.endDate && !blocked ? `<span>${formatDuration(calculateDuration(record.startDate, record.endDate))}</span>` : ''}</span>
+      </div>`;
     }).join('');
-    els.careerList.querySelectorAll('[data-record-id]').forEach(input => input.addEventListener('change', () => toggleRecord(input.dataset.recordId, input.checked)));
 
-    const messages = person.records.flatMap(record => record.issues.map(item => item.message));
+    els.careerList.querySelectorAll('[data-record-id]').forEach(input => input.addEventListener('change', () => toggleRecord(input.dataset.recordId, input.checked)));
+    els.careerList.querySelectorAll('[data-open-record-id]').forEach(button => button.addEventListener('click', () => openRecordIssue(button.dataset.openRecordId, button.dataset.focusField)));
+    renderCareerAlert(person, selectedRecords);
+  }
+
+  function renderCareerAlert(person, selectedRecords) {
+    const birthValue = $('field-birth').value.trim();
+    const applicantNeedsBirth = !parseDateStrict(birthValue);
+    const notices = person.records.flatMap(record => record.issues.map(item => ({ record, item })));
+
     if (state.certificateMode === 'hours') {
-      const missingHours = selectedRecords.filter(record => !record.hours).length;
-      if (missingHours) messages.unshift(`선택한 경력 중 소정근로시간이 입력되지 않은 자료가 ${missingHours}건 있습니다.`);
+      selectedRecords.filter(record => !record.hours).forEach(record => {
+        notices.unshift({ record, item: issue('error', '소정근로시간이 비어 있습니다.', 'edit-hours') });
+      });
     }
-    els.careerAlert.hidden = !messages.length;
-    if (messages.length) {
-      const hasErrors = person.records.some(hasError);
-      els.careerAlert.className = `inline-alert ${hasErrors ? 'error' : ''}`;
-      els.careerAlert.innerHTML = messages.slice(0, 6).map(message => `• ${escapeHtml(message)}`).join('<br>') + (messages.length > 6 ? '<br>• 대장 점검 화면에서 나머지 내용을 확인하세요.' : '');
+
+    if (!applicantNeedsBirth && !notices.length) {
+      els.careerAlert.hidden = true;
+      return;
     }
+
+    const hasErrors = notices.some(({ item }) => item.level === 'error');
+    els.careerAlert.hidden = false;
+    els.careerAlert.className = `inline-alert ${hasErrors ? 'error' : ''}`;
+
+    const sections = [];
+    if (applicantNeedsBirth) {
+      const message = birthValue ? '신청자 생년월일을 확인해 주세요.' : '신청자 생년월일을 입력해 주세요.';
+      sections.push(`<div class="alert-section"><strong class="alert-heading">신청자 정보 확인</strong><button class="alert-action" data-focus-applicant="birth" type="button">• ${escapeHtml(message)}</button></div>`);
+    }
+
+    if (notices.length) {
+      const visible = notices.slice(0, 8);
+      const rows = visible.map(({ record, item }) => {
+        const period = formatRecordPeriod(record);
+        return `<button class="alert-action" data-open-record-id="${escapeAttr(record.id)}" data-focus-field="${escapeAttr(item.field || '')}" type="button">• ${escapeHtml(period)} · ${escapeHtml(item.message)}</button>`;
+      }).join('');
+      const more = notices.length > visible.length ? `<p class="alert-more">그 밖의 ${notices.length - visible.length}건은 대장 점검 화면에서 확인할 수 있습니다.</p>` : '';
+      sections.push(`<div class="alert-section"><strong class="alert-heading">대장 정보 확인</strong>${rows}${more}</div>`);
+    }
+
+    els.careerAlert.innerHTML = sections.join('');
+    els.careerAlert.querySelectorAll('[data-focus-applicant="birth"]').forEach(button => button.addEventListener('click', focusApplicantBirth));
+    els.careerAlert.querySelectorAll('[data-open-record-id]').forEach(button => button.addEventListener('click', () => openRecordIssue(button.dataset.openRecordId, button.dataset.focusField)));
+  }
+
+  function formatRecordPeriod(record) {
+    return `${formatDate(record.startDate)} ~ ${formatDate(record.endDate)}`;
+  }
+
+  function openRecordIssue(recordId, fieldId = '') {
+    const index = state.records.findIndex(record => record.id === recordId);
+    if (index < 0) return;
+    openEditDialog(index, fieldId);
+  }
+
+  function focusApplicantBirth() {
+    const field = $('field-birth');
+    if (!field) return;
+    field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    window.setTimeout(() => {
+      field.focus({ preventScroll: true });
+      field.classList.remove('attention-highlight');
+      void field.offsetWidth;
+      field.classList.add('attention-highlight');
+      window.setTimeout(() => field.classList.remove('attention-highlight'), 1600);
+    }, 350);
   }
 
   function toggleRecord(id, checked) {
@@ -1167,11 +1244,12 @@
     }, 300);
   }
 
-  function openEditDialog(index) {
+  function openEditDialog(index, focusFieldId = '') {
     const record = state.records[index];
     if (!record) return;
     const teacher = state.ledgerType === 'teacher';
     const instructor = state.ledgerType === 'instructor';
+    clearEditFieldErrors();
     $('edit-index').value = index;
     $('edit-title').textContent = teacher ? '기간제교원 경력 수정' : instructor ? '시간강사·전문강사 경력 수정' : '일반 경력 수정';
     $('edit-name').value = record.name;
@@ -1199,10 +1277,55 @@
     $('edit-end').value = record.endDate ? dateToInput(record.endDate) : safeInputDate(record.endRaw);
     $('edit-retirement').value = record.retirement;
     $('edit-note').value = record.note;
-    els.editIssues.hidden = !record.issues.length;
-    els.editIssues.className = `inline-alert ${hasError(record) ? 'error' : ''}`;
-    els.editIssues.innerHTML = record.issues.map(item => `• ${escapeHtml(item.message)}`).join('<br>');
+    refreshEditIssues(record);
+    document.body.classList.add('dialog-open');
     els.editDialog.showModal();
+
+    const targetIssue = record.issues.find(item => item.field === focusFieldId)
+      || record.issues.find(item => item.level === 'error')
+      || record.issues[0];
+    const targetField = focusFieldId || targetIssue?.field || '';
+    if (targetField) window.setTimeout(() => focusEditField(targetField, targetIssue?.message || ''), 80);
+  }
+
+  function refreshEditIssues(record) {
+    clearEditFieldErrors();
+    const items = record?.issues || [];
+    els.editIssues.hidden = !items.length;
+    els.editIssues.className = `inline-alert edit-issues ${items.some(item => item.level === 'error') ? 'error' : ''}`;
+    els.editIssues.innerHTML = items.map(item => item.field
+      ? `<button class="edit-issue-action" data-edit-field="${escapeAttr(item.field)}" data-edit-message="${escapeAttr(item.message)}" type="button">• ${escapeHtml(item.message)}</button>`
+      : `<span class="edit-issue-message">• ${escapeHtml(item.message)}</span>`).join('');
+    els.editIssues.querySelectorAll('[data-edit-field]').forEach(button => button.addEventListener('click', () => focusEditField(button.dataset.editField, button.dataset.editMessage)));
+  }
+
+  function clearEditFieldErrors() {
+    qsa('#edit-form .is-invalid').forEach(field => {
+      field.classList.remove('is-invalid');
+      field.removeAttribute('aria-invalid');
+      field.removeAttribute('aria-describedby');
+    });
+    qsa('#edit-form .edit-field-message').forEach(message => message.remove());
+  }
+
+  function focusEditField(fieldId, message = '') {
+    clearEditFieldErrors();
+    const field = $(fieldId);
+    if (!field || field.closest('[hidden]')) return;
+    field.classList.add('is-invalid');
+    field.setAttribute('aria-invalid', 'true');
+    const label = field.closest('label');
+    if (label && message) {
+      const messageId = `${fieldId}-error-message`;
+      const errorMessage = document.createElement('span');
+      errorMessage.id = messageId;
+      errorMessage.className = 'edit-field-message';
+      errorMessage.textContent = message;
+      label.appendChild(errorMessage);
+      field.setAttribute('aria-describedby', messageId);
+    }
+    field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    window.setTimeout(() => field.focus({ preventScroll: true }), 220);
   }
 
   async function exportLedger() {
@@ -1362,7 +1485,7 @@
 
   function hasError(record) { return record.issues.some(item => item.level === 'error'); }
   function hasWarning(record) { return record.issues.some(item => item.level === 'warning'); }
-  function issue(level, message) { return { level, message }; }
+  function issue(level, message, field = '') { return { level, message, field }; }
   function countIssues(level) { return state.records.reduce((sum, record) => sum + record.issues.filter(item => item.level === level).length, 0); }
   function compareLatest(a, b) { return dateValue(a.endDate || a.startDate) - dateValue(b.endDate || b.startDate); }
   function dateValue(date) { return date instanceof Date && !Number.isNaN(date.valueOf()) ? date.valueOf() : 0; }

@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#0f172a" />
-  <title>경력증명 자동화 v0.3.1</title>
+  <title>경력증명 자동화 v0.4.0</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2216%22 fill=%22%230f172a%22/><path d=%22M18 15h28a4 4 0 0 1 4 4v34H14V19a4 4 0 0 1 4-4Z%22 fill=%22white%22/><path d=%22M22 25h20M22 33h20M22 41h12%22 stroke=%22%234f46e5%22 stroke-width=%224%22 stroke-linecap=%22round%22/></svg>" />
   <link rel="stylesheet" href="styles.css" />
   <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -22,7 +22,7 @@
       </div>
       <div class="header-actions">
         <span class="privacy-badge"><span class="dot"></span>외부 전송 없이 처리</span>
-        <span class="version-badge">v0.3.1</span>
+        <span class="version-badge">v0.4.0</span>
       </div>
     </header>
 
@@ -264,32 +264,34 @@
     <form method="dialog" id="edit-form">
       <div class="dialog-heading">
         <div><span class="eyebrow">대장 바로 수정</span><h2 id="edit-title">경력 자료 수정</h2></div>
-        <button class="icon-button" value="cancel" aria-label="닫기">×</button>
+        <button class="icon-button" type="button" data-close-edit-dialog aria-label="닫기">×</button>
       </div>
-      <input id="edit-index" type="hidden" />
-      <div class="form-grid two">
-        <label>성명<input id="edit-name" type="text" required /></label>
-        <label><span id="edit-id-label">생년월일</span><input id="edit-id-value" type="text" autocomplete="off" /></label>
-        <label id="edit-position-group">직급(위)<input id="edit-position" type="text" /></label>
-        <label id="edit-department-group">근무부서<input id="edit-department" type="text" /></label>
-        <label id="edit-subject-group" hidden>과목<input id="edit-subject" type="text" /></label>
-        <label id="edit-instructor-role-group" hidden>직위구분<select id="edit-instructor-role"><option value="시간강사">시간강사</option><option value="전문강사">전문강사</option></select></label>
-        <label id="edit-instructor-duty-type-group" hidden>담당구분<select id="edit-instructor-duty-type"><option value="교과">교과</option><option value="프로그램">프로그램</option><option value="부서">부서</option></select></label>
-        <label id="edit-instructor-duty-content-group" hidden>담당내용<input id="edit-instructor-duty-content" type="text" /></label>
-        <label id="edit-instructor-weekly-hours-group" hidden>주당수업시간<input id="edit-instructor-weekly-hours" type="text" /></label>
-        <label id="edit-instructor-total-weeks-group" hidden>총주수<input id="edit-instructor-total-weeks" type="text" /></label>
-        <label id="edit-instructor-vacation-group" hidden>방학기간 제외<select id="edit-instructor-vacation"><option value="아니오">아니오</option><option value="예">예</option></select></label>
-        <label id="edit-instructor-work-time-group" class="span-2" hidden>근무시간<input id="edit-instructor-work-time" type="text" /></label>
-        <label id="edit-pay-type-group">급제<input id="edit-pay-type" type="text" /></label>
-        <label id="edit-hours-group">소정근로시간<input id="edit-hours" type="text" /></label>
-        <label>시작일<input id="edit-start" type="date" required /></label>
-        <label>종료일<input id="edit-end" type="date" /></label>
-        <label class="span-2">퇴직사유<input id="edit-retirement" type="text" /></label>
-        <label class="span-2">비고<textarea id="edit-note" rows="3"></textarea></label>
+      <div class="dialog-body">
+        <input id="edit-index" type="hidden" />
+        <div class="form-grid edit-form-grid">
+          <label>성명<input id="edit-name" type="text" required /></label>
+          <label><span id="edit-id-label">생년월일</span><input id="edit-id-value" type="text" autocomplete="off" /></label>
+          <label id="edit-position-group">직급(위)<input id="edit-position" type="text" /></label>
+          <label id="edit-department-group">근무부서<input id="edit-department" type="text" /></label>
+          <label id="edit-subject-group" hidden>과목<input id="edit-subject" type="text" /></label>
+          <label id="edit-instructor-role-group" hidden>직위구분<select id="edit-instructor-role"><option value="시간강사">시간강사</option><option value="전문강사">전문강사</option></select></label>
+          <label id="edit-instructor-duty-type-group" hidden>담당구분<select id="edit-instructor-duty-type"><option value="교과">교과</option><option value="프로그램">프로그램</option><option value="부서">부서</option></select></label>
+          <label id="edit-instructor-duty-content-group" hidden>담당내용<input id="edit-instructor-duty-content" type="text" /></label>
+          <label id="edit-instructor-weekly-hours-group" hidden>주당수업시간<input id="edit-instructor-weekly-hours" type="text" /></label>
+          <label id="edit-instructor-total-weeks-group" hidden>총주수<input id="edit-instructor-total-weeks" type="text" /></label>
+          <label id="edit-instructor-vacation-group" hidden>방학기간 제외<select id="edit-instructor-vacation"><option value="아니오">아니오</option><option value="예">예</option></select></label>
+          <label id="edit-instructor-work-time-group" hidden>근무시간<input id="edit-instructor-work-time" type="text" /></label>
+          <label id="edit-pay-type-group">급제<input id="edit-pay-type" type="text" /></label>
+          <label id="edit-hours-group">소정근로시간<input id="edit-hours" type="text" /></label>
+          <label>시작일<input id="edit-start" type="date" required /></label>
+          <label>종료일<input id="edit-end" type="date" /></label>
+          <label>퇴직사유<input id="edit-retirement" type="text" /></label>
+          <label>비고<textarea id="edit-note" rows="3"></textarea></label>
+        </div>
+        <div id="edit-issues" class="inline-alert edit-issues" hidden></div>
       </div>
-      <div id="edit-issues" class="inline-alert" hidden></div>
       <div class="dialog-actions">
-        <button class="btn ghost" value="cancel">취소</button>
+        <button class="btn ghost" type="button" data-close-edit-dialog>취소</button>
         <button id="save-record" class="btn primary" value="default" type="submit">수정 저장</button>
       </div>
     </form>

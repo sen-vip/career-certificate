@@ -65,6 +65,13 @@
 
   const INSTRUCTOR_ROLE_VALUES = ['시간강사', '전문강사'];
   const INSTRUCTOR_DUTY_VALUES = ['교과', '프로그램', '부서'];
+  const VACATION_TYPE_LABELS = {
+    none: '',
+    summer: '여름방학',
+    winter: '겨울방학',
+    yearEnd: '학년말·봄방학',
+    other: '기타'
+  };
 
   const state = {
     records: [],
@@ -75,6 +82,7 @@
     ledgerType: 'none',
     certificateMode: 'general',
     rrnDisplay: false,
+    vacationOptions: new Map(),
     settings: loadSettings()
   };
 
@@ -121,6 +129,7 @@
     bindRrnInput();
     bindModeControls();
     bindCareerControls();
+    bindVacationControls();
     bindSettings();
     bindLedger();
     bindEditDialog();
@@ -368,6 +377,145 @@
       updateRetirementFromSelection();
       renderCareers();
       renderPreview();
+    });
+  }
+
+  function bindVacationControls() {
+    const section = $('vacation-options-section');
+    if (!section) return;
+
+    section.addEventListener('pointerdown', event => {
+      if (event.target.closest('[data-vacation-quick-fix]')) event.preventDefault();
+    });
+
+    section.addEventListener('click', event => {
+      const modeButton = event.target.closest('[data-vacation-mode]');
+      if (modeButton) {
+        const record = state.records.find(item => item.id === modeButton.dataset.recordId);
+        if (!record) return;
+        const option = ensureVacationOption(record);
+        option.mode = modeButton.dataset.vacationMode;
+        if (option.mode === 'detailed' && !option.periods.length) option.periods.push(createVacationPeriod());
+        renderVacationOptions();
+        renderPreview();
+        return;
+      }
+
+      const addButton = event.target.closest('[data-add-vacation]');
+      if (addButton) {
+        const record = state.records.find(item => item.id === addButton.dataset.recordId);
+        if (!record) return;
+        ensureVacationOption(record).periods.push(createVacationPeriod());
+        renderVacationOptions();
+        renderPreview();
+        const card = section.querySelector(`[data-vacation-card="${cssEscape(record.id)}"]`);
+        card?.querySelector('.vacation-period-card:last-of-type .vacation-date-input')?.focus();
+        return;
+      }
+
+      const removeButton = event.target.closest('[data-remove-vacation]');
+      if (removeButton) {
+        const record = state.records.find(item => item.id === removeButton.dataset.recordId);
+        if (!record) return;
+        const option = ensureVacationOption(record);
+        option.periods = option.periods.filter(period => period.id !== removeButton.dataset.periodId);
+        renderVacationOptions();
+        renderPreview();
+        return;
+      }
+
+      const quickFixButton = event.target.closest('[data-vacation-quick-fix]');
+      if (quickFixButton) {
+        const record = state.records.find(item => item.id === quickFixButton.dataset.recordId);
+        if (!record) return;
+        const option = ensureVacationOption(record);
+        const period = option.periods.find(item => item.id === quickFixButton.dataset.periodId);
+        const field = quickFixButton.dataset.vacationQuickFix;
+        const value = quickFixButton.dataset.quickFixValue;
+        if (!period || !['startDate', 'endDate'].includes(field) || !parseDateStrict(value)) return;
+        period[field] = value;
+        const input = section.querySelector(`[data-record-id="${cssEscape(record.id)}"][data-period-id="${cssEscape(period.id)}"][data-vacation-date="${field}"]`);
+        if (input) input.value = value;
+        updateVacationCardFeedback(record.id);
+        renderPreview();
+        window.setTimeout(() => input?.focus(), 0);
+        return;
+      }
+
+      const pickerButton = event.target.closest('[data-vacation-picker-target]');
+      if (pickerButton) {
+        const picker = section.querySelector(`#${cssEscape(pickerButton.dataset.vacationPickerTarget)}`);
+        const textInput = section.querySelector(`[data-picker-text-for="${cssEscape(pickerButton.dataset.vacationPickerTarget)}"]`);
+        if (!picker || !textInput) return;
+        const parsed = parseDateStrict(textInput.value);
+        picker.value = parsed ? dateToInput(parsed) : '';
+        try {
+          if (typeof picker.showPicker === 'function') picker.showPicker();
+          else picker.click();
+        } catch {
+          picker.focus();
+          picker.click();
+        }
+      }
+    });
+
+    section.addEventListener('input', event => {
+      const input = event.target.closest('[data-vacation-date]');
+      if (!input) return;
+      const record = state.records.find(item => item.id === input.dataset.recordId);
+      if (!record) return;
+      const option = ensureVacationOption(record);
+      const period = option.periods.find(item => item.id === input.dataset.periodId);
+      if (!period) return;
+      const formatted = formatEditableDateInput(input.value);
+      if (input.value !== formatted) {
+        input.value = formatted;
+        try { input.setSelectionRange(input.value.length, input.value.length); } catch {}
+      }
+      period[input.dataset.vacationDate] = input.value;
+      updateVacationCardFeedback(record.id);
+      renderPreview();
+    });
+
+    section.addEventListener('focusout', event => {
+      const input = event.target.closest('[data-vacation-date]');
+      if (!input) return;
+      const parsed = parseDateStrict(input.value);
+      if (parsed) input.value = dateToInput(parsed);
+      const record = state.records.find(item => item.id === input.dataset.recordId);
+      const option = record ? ensureVacationOption(record) : null;
+      const period = option?.periods.find(item => item.id === input.dataset.periodId);
+      if (period) period[input.dataset.vacationDate] = input.value;
+      if (record) updateVacationCardFeedback(record.id);
+      renderPreview();
+    });
+
+    section.addEventListener('change', event => {
+      const typeSelect = event.target.closest('[data-vacation-type]');
+      if (typeSelect) {
+        const record = state.records.find(item => item.id === typeSelect.dataset.recordId);
+        const option = record ? ensureVacationOption(record) : null;
+        const period = option?.periods.find(item => item.id === typeSelect.dataset.periodId);
+        if (!record || !period) return;
+        period.type = Object.hasOwn(VACATION_TYPE_LABELS, typeSelect.value) ? typeSelect.value : 'none';
+        updateVacationCardFeedback(record.id);
+        renderPreview();
+        return;
+      }
+
+      const picker = event.target.closest('[data-vacation-native-picker]');
+      if (!picker?.value) return;
+      const record = state.records.find(item => item.id === picker.dataset.recordId);
+      if (!record) return;
+      const option = ensureVacationOption(record);
+      const period = option.periods.find(item => item.id === picker.dataset.periodId);
+      if (!period) return;
+      period[picker.dataset.vacationNativePicker] = picker.value;
+      const textInput = section.querySelector(`[data-picker-text-for="${cssEscape(picker.id)}"]`);
+      if (textInput) textInput.value = picker.value;
+      updateVacationCardFeedback(record.id);
+      renderPreview();
+      textInput?.focus();
     });
   }
 
@@ -692,6 +840,7 @@
     clearRrnInput();
     state.selectedPersonKey = null;
     state.selectedRecordIds.clear();
+    state.vacationOptions.clear();
     state.records = rows
       .map((row, index) => normalizeRecord(row, index, ledgerType))
       .filter(record => record.name || record.identityRaw || record.startRaw || record.endRaw || record.position || record.dutyContent);
@@ -930,7 +1079,9 @@
   }
 
   function selectPerson(key) {
+    const personChanged = state.selectedPersonKey !== key;
     state.selectedPersonKey = key;
+    if (personChanged) state.vacationOptions.clear();
     state.selectedRecordIds.clear();
     state.rrnDisplay = false;
     clearRrnInput();
@@ -960,6 +1111,7 @@
       els.careerList.className = 'career-list empty-state small';
       els.careerList.innerHTML = '<p>선택한 사람의 경력이 이곳에 표시됩니다.</p>';
       els.careerAlert.hidden = true;
+      renderVacationOptions();
       return;
     }
 
@@ -994,6 +1146,7 @@
     els.careerList.querySelectorAll('[data-record-id]').forEach(input => input.addEventListener('change', () => toggleRecord(input.dataset.recordId, input.checked)));
     els.careerList.querySelectorAll('[data-open-record-id]').forEach(button => button.addEventListener('click', () => openRecordIssue(button.dataset.openRecordId, button.dataset.focusField)));
     renderCareerAlert(person, selectedRecords);
+    renderVacationOptions();
   }
 
   function renderCareerAlert(person, selectedRecords) {
@@ -1072,6 +1225,340 @@
     $('field-retirement').value = latest?.retirement || (['teacher', 'instructor'].includes(state.ledgerType) && latest?.endDate ? '계약기간 만료' : '');
   }
 
+  function createVacationPeriod() {
+    return {
+      id: `vacation-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      type: 'none',
+      startDate: '',
+      endDate: ''
+    };
+  }
+
+  function defaultVacationMode(record) {
+    return record?.vacationExcluded === true ? 'excluded' : 'none';
+  }
+
+  function ensureVacationOption(record) {
+    if (!state.vacationOptions.has(record.id)) {
+      state.vacationOptions.set(record.id, {
+        mode: defaultVacationMode(record),
+        periods: []
+      });
+    }
+    return state.vacationOptions.get(record.id);
+  }
+
+  function getVacationOption(record) {
+    return state.vacationOptions.get(record.id) || {
+      mode: defaultVacationMode(record),
+      periods: []
+    };
+  }
+
+  function renderVacationOptions() {
+    const section = $('vacation-options-section');
+    const list = $('vacation-options-list');
+    if (!section || !list) return;
+
+    const records = state.ledgerType === 'instructor' ? getSelectedRecords() : [];
+    section.hidden = !records.length;
+    if (!records.length) {
+      list.innerHTML = '';
+      return;
+    }
+
+    records.forEach(ensureVacationOption);
+    list.innerHTML = records.map(record => buildVacationOptionCard(record)).join('');
+    records.forEach(record => updateVacationCardFeedback(record.id));
+  }
+
+  function buildVacationOptionCard(record) {
+    const option = ensureVacationOption(record);
+    const modes = [
+      { value: 'none', label: '표시 안 함', description: '방학 관련 문구를 넣지 않음' },
+      { value: 'excluded', label: '방학기간 제외', description: '기존처럼 짧게 표시' },
+      { value: 'detailed', label: '상세 기간 입력', description: '요청받은 날짜를 정확히 표시' }
+    ];
+    const modeButtons = modes.map(mode => `
+      <button class="vacation-mode-card ${option.mode === mode.value ? 'is-active' : ''}" data-vacation-mode="${mode.value}" data-record-id="${escapeAttr(record.id)}" type="button" role="radio" aria-checked="${option.mode === mode.value}">
+        <span class="vacation-radio-dot" aria-hidden="true"></span>
+        <span><strong>${mode.label}</strong><small>${mode.description}</small></span>
+      </button>`).join('');
+
+    const periods = option.periods.map((period, index) => buildVacationPeriodCard(record, period, index)).join('');
+    const detailedPanel = option.mode === 'detailed' ? `
+      <div class="vacation-detail-panel">
+        <div class="vacation-period-list">${periods}</div>
+        <button class="vacation-add-button" data-add-vacation data-record-id="${escapeAttr(record.id)}" type="button">＋ 방학기간 추가</button>
+        <div class="vacation-card-alert" data-vacation-card-alert role="status" aria-live="polite" hidden></div>
+        <div class="vacation-output-preview">
+          <span>증명서 표시 미리보기</span>
+          <p data-vacation-preview></p>
+        </div>
+      </div>` : '';
+
+    return `<article class="vacation-option-card" data-vacation-card="${escapeAttr(record.id)}">
+      <div class="vacation-card-heading">
+        <div>
+          <strong>${escapeHtml(formatRecordPeriod(record))}</strong>
+          <span>${escapeHtml(`${record.roleType || '시간강사'} · ${record.dutyContent || '담당내용 미기재'}`)}</span>
+          <span class="vacation-range-help">입력 가능 기간: ${escapeHtml(formatRecordPeriod(record))}</span>
+        </div>
+        <span class="vacation-source-chip">대장값 ${record.vacationExcluded === true ? '제외' : '미제외'}</span>
+      </div>
+      <div class="vacation-mode-grid" role="radiogroup" aria-label="${escapeAttr(formatRecordPeriod(record))} 방학기간 표시 방식">
+        ${modeButtons}
+      </div>
+      ${detailedPanel}
+    </article>`;
+  }
+
+  function buildVacationPeriodCard(record, period, index) {
+    const startPickerId = `vacation-picker-${record.id}-${period.id}-start`;
+    const endPickerId = `vacation-picker-${record.id}-${period.id}-end`;
+    return `<section class="vacation-period-card" data-vacation-period-card="${escapeAttr(period.id)}">
+      <div class="vacation-period-heading">
+        <strong>방학기간 ${index + 1}</strong>
+        <button class="vacation-remove-button" data-remove-vacation data-record-id="${escapeAttr(record.id)}" data-period-id="${escapeAttr(period.id)}" type="button" aria-label="방학기간 ${index + 1} 삭제">삭제</button>
+      </div>
+      ${buildVacationTypeField(record, period)}
+      ${buildVacationDateField('시작일', record, period, 'startDate', startPickerId)}
+      ${buildVacationDateField('종료일', record, period, 'endDate', endPickerId)}
+    </section>`;
+  }
+
+  function buildVacationTypeField(record, period) {
+    const value = Object.hasOwn(VACATION_TYPE_LABELS, period.type) ? period.type : 'none';
+    const options = [
+      ['none', '구분 표시 안 함'],
+      ['summer', '여름방학'],
+      ['winter', '겨울방학'],
+      ['yearEnd', '학년말·봄방학'],
+      ['other', '기타']
+    ].map(([optionValue, label]) => `<option value="${optionValue}" ${value === optionValue ? 'selected' : ''}>${label}</option>`).join('');
+    return `<label class="vacation-type-field">
+      <span>방학 구분 <small>선택사항</small></span>
+      <select data-vacation-type data-record-id="${escapeAttr(record.id)}" data-period-id="${escapeAttr(period.id)}" aria-label="방학 구분">${options}</select>
+    </label>`;
+  }
+
+  function buildVacationDateField(label, record, period, key, pickerId) {
+    const textInputId = `${pickerId}-text`;
+    return `<div class="vacation-date-field">
+      <label for="${escapeAttr(textInputId)}">${label}</label>
+      <span class="date-entry-control">
+        <input id="${escapeAttr(textInputId)}" class="vacation-date-input" type="text" inputmode="numeric" maxlength="10" placeholder="YYYY-MM-DD" autocomplete="off"
+          value="${escapeAttr(period[key])}" data-vacation-date="${key}" data-record-id="${escapeAttr(record.id)}" data-period-id="${escapeAttr(period.id)}" data-picker-text-for="${escapeAttr(pickerId)}" />
+        <button class="date-picker-button" data-vacation-picker-target="${escapeAttr(pickerId)}" type="button" aria-label="${label} 달력 열기">${calendarIcon()}</button>
+        <input id="${escapeAttr(pickerId)}" class="native-date-picker" type="date" data-vacation-native-picker="${key}" data-record-id="${escapeAttr(record.id)}" data-period-id="${escapeAttr(period.id)}" tabindex="-1" aria-hidden="true" />
+      </span>
+      <span class="vacation-field-message" data-vacation-error-for="${key}" aria-live="polite"></span>
+    </div>`;
+  }
+
+  function calendarIcon() {
+    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v3M17 3v3M4.5 9h15M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"/></svg>';
+  }
+
+  function validateVacationOption(record, option = getVacationOption(record)) {
+    return analyzeVacationOption(record, option).errors;
+  }
+
+  function analyzeVacationOption(record, option = getVacationOption(record)) {
+    if (option.mode !== 'detailed') return { errors: [], validPeriods: [] };
+    const errors = [];
+    if (!option.periods.length) {
+      errors.push({ recordId: record.id, periodId: '', field: '', message: '상세 기간을 한 개 이상 추가해 주세요.' });
+      return { errors, validPeriods: [] };
+    }
+
+    const candidates = [];
+    const invalidPeriodIds = new Set();
+    option.periods.forEach((period, index) => {
+      const startRaw = text(period.startDate);
+      const endRaw = text(period.endDate);
+      const start = parseDateStrict(startRaw);
+      const end = parseDateStrict(endRaw);
+      const prefix = `방학기간 ${index + 1}`;
+      let invalid = false;
+
+      if (!startRaw) {
+        errors.push({ recordId: record.id, periodId: period.id, field: 'startDate', message: `${prefix} 시작일을 입력해 주세요.` });
+        invalid = true;
+      } else if (!start) {
+        errors.push({ recordId: record.id, periodId: period.id, field: 'startDate', message: `${prefix} 시작일을 유효한 날짜로 입력해 주세요.` });
+        invalid = true;
+      }
+      if (!endRaw) {
+        errors.push({ recordId: record.id, periodId: period.id, field: 'endDate', message: `${prefix} 종료일을 입력해 주세요.` });
+        invalid = true;
+      } else if (!end) {
+        errors.push({ recordId: record.id, periodId: period.id, field: 'endDate', message: `${prefix} 종료일을 유효한 날짜로 입력해 주세요.` });
+        invalid = true;
+      }
+
+      if (start && end) {
+        if (end < start) {
+          errors.push({ recordId: record.id, periodId: period.id, field: 'endDate', message: `${prefix} 종료일 ${formatDateNatural(end)}이 시작일 ${formatDateNatural(start)}보다 빠릅니다.` });
+          invalid = true;
+        } else {
+          if (record.startDate && start < record.startDate) {
+            const suggestion = findVacationYearSuggestion(record, start, 'startDate', end);
+            errors.push({
+              recordId: record.id,
+              periodId: period.id,
+              field: 'startDate',
+              message: `시작일 ${formatDateNatural(start)}은 경력 시작일 ${formatDateNatural(record.startDate)}보다 빠릅니다.`,
+              suggestedValue: suggestion
+            });
+            invalid = true;
+          }
+          if (record.endDate && end > record.endDate) {
+            const suggestion = findVacationYearSuggestion(record, end, 'endDate', start);
+            errors.push({
+              recordId: record.id,
+              periodId: period.id,
+              field: 'endDate',
+              message: `종료일 ${formatDateNatural(end)}은 경력 종료일 ${formatDateNatural(record.endDate)}보다 늦습니다.`,
+              suggestedValue: suggestion
+            });
+            invalid = true;
+          }
+        }
+      }
+
+      if (invalid) invalidPeriodIds.add(period.id);
+      else if (start && end) candidates.push({ ...period, type: Object.hasOwn(VACATION_TYPE_LABELS, period.type) ? period.type : 'none', start, end, index });
+    });
+
+    const sorted = [...candidates].sort((a, b) => a.start - b.start || a.end - b.end);
+    sorted.forEach((period, index) => {
+      const previous = sorted[index - 1];
+      if (previous && period.start <= previous.end) {
+        const same = period.start.valueOf() === previous.start.valueOf() && period.end.valueOf() === previous.end.valueOf();
+        errors.push({
+          recordId: record.id,
+          periodId: period.id,
+          field: 'startDate',
+          message: same ? `방학기간 ${period.index + 1}가 앞 기간과 중복됩니다.` : `방학기간 ${period.index + 1}가 앞 기간과 겹칩니다.`
+        });
+        invalidPeriodIds.add(period.id);
+      }
+    });
+
+    return {
+      errors,
+      validPeriods: sorted.filter(period => !invalidPeriodIds.has(period.id))
+    };
+  }
+
+  function findVacationYearSuggestion(record, enteredDate, field, pairedDate) {
+    if (!record.startDate || !record.endDate || !enteredDate) return '';
+    const candidates = [];
+    for (let year = record.startDate.getFullYear(); year <= record.endDate.getFullYear(); year += 1) {
+      const candidate = strictDate(year, enteredDate.getMonth() + 1, enteredDate.getDate());
+      if (!candidate || candidate < record.startDate || candidate > record.endDate) continue;
+      if (field === 'startDate' && pairedDate && candidate > pairedDate) continue;
+      if (field === 'endDate' && pairedDate && candidate < pairedDate) continue;
+      candidates.push(candidate);
+    }
+    if (candidates.length !== 1 || candidates[0].getFullYear() === enteredDate.getFullYear()) return '';
+    return dateToInput(candidates[0]);
+  }
+
+  function updateVacationCardFeedback(recordId) {
+    const record = state.records.find(item => item.id === recordId);
+    const card = $('vacation-options-section')?.querySelector(`[data-vacation-card="${cssEscape(recordId)}"]`);
+    if (!record || !card) return;
+    const option = ensureVacationOption(record);
+    const analysis = analyzeVacationOption(record, option);
+    const errors = analysis.errors;
+
+    card.classList.toggle('has-error', errors.length > 0);
+    card.querySelectorAll('.vacation-date-input').forEach(input => {
+      input.classList.remove('is-invalid');
+      input.removeAttribute('aria-invalid');
+      const message = input.closest('.vacation-date-field')?.querySelector('[data-vacation-error-for]');
+      if (message) message.innerHTML = '';
+    });
+
+    errors.forEach(error => {
+      if (!error.periodId || !error.field) return;
+      const input = card.querySelector(`[data-period-id="${cssEscape(error.periodId)}"][data-vacation-date="${error.field}"]`);
+      if (!input || input.classList.contains('is-invalid')) return;
+      input.classList.add('is-invalid');
+      input.setAttribute('aria-invalid', 'true');
+      const message = input.closest('.vacation-date-field')?.querySelector(`[data-vacation-error-for="${error.field}"]`);
+      if (message) {
+        const quickFix = error.suggestedValue
+          ? `<button class="vacation-quick-fix" type="button" data-vacation-quick-fix="${error.field}" data-quick-fix-value="${escapeAttr(error.suggestedValue)}" data-record-id="${escapeAttr(record.id)}" data-period-id="${escapeAttr(error.periodId)}">${escapeHtml(error.suggestedValue)}으로 수정</button>`
+          : '';
+        message.innerHTML = `<span>${escapeHtml(error.message)}</span>${quickFix}`;
+      }
+    });
+
+    const alert = card.querySelector('[data-vacation-card-alert]');
+    if (alert) {
+      const generalErrors = errors.filter(error => !error.periodId || !error.field);
+      alert.hidden = !generalErrors.length;
+      alert.textContent = generalErrors.map(error => `• ${error.message}`).join('\n');
+    }
+    updateVacationPreviewBox(record, card, analysis);
+  }
+
+  function updateVacationPreviewBox(record, card, analysis = analyzeVacationOption(record, ensureVacationOption(record))) {
+    const preview = card?.querySelector('[data-vacation-preview]');
+    const box = preview?.closest('.vacation-output-preview');
+    if (!preview || !box) return;
+    const valid = analysis.validPeriods;
+    const errors = analysis.errors;
+    box.classList.toggle('has-error', errors.length > 0);
+
+    const validHtml = valid.length
+      ? `<span class="vacation-preview-valid"><strong>방학기간:</strong> ${formatVacationPeriodsHtml(valid)} <span>제외</span></span>`
+      : '';
+    const uniqueIssues = [...new Set(errors.map(error => error.message))];
+    const issueHtml = uniqueIssues.length
+      ? `<span class="vacation-preview-issues">${uniqueIssues.map(message => `<span>! ${escapeHtml(message)}</span>`).join('')}</span>`
+      : '';
+    preview.innerHTML = validHtml || issueHtml
+      ? `${validHtml}${issueHtml}`
+      : '<span class="vacation-preview-empty">기간을 입력하면 실제 출력 문장이 표시됩니다.</span>';
+  }
+
+  function getPreviewVacationPeriods(record, option = getVacationOption(record)) {
+    if (option.mode !== 'detailed') return [];
+    return analyzeVacationOption(record, option).validPeriods;
+  }
+
+  function getValidVacationPeriods(record, option = getVacationOption(record)) {
+    const analysis = analyzeVacationOption(record, option);
+    if (option.mode !== 'detailed' || analysis.errors.length) return [];
+    return analysis.validPeriods;
+  }
+
+  function formatVacationPeriodsHtml(periods) {
+    return periods.map((period, index) => {
+      const typeLabel = VACATION_TYPE_LABELS[period.type] || '';
+      const typeHtml = typeLabel ? `<span class="vacation-type-label">${escapeHtml(typeLabel)}</span> ` : '';
+      return `<span class="vacation-period-text">${typeHtml}${escapeHtml(`${formatDateNatural(period.start)} ~ ${formatDateNatural(period.end)}`)}</span>${index < periods.length - 1 ? '<span class="vacation-comma">,</span> ' : ''}`;
+    }).join('');
+  }
+
+  function focusVacationIssue(error) {
+    renderVacationOptions();
+    window.setTimeout(() => {
+      const section = $('vacation-options-section');
+      const card = section?.querySelector(`[data-vacation-card="${cssEscape(error.recordId)}"]`);
+      const input = error.periodId && error.field
+        ? card?.querySelector(`[data-period-id="${cssEscape(error.periodId)}"][data-vacation-date="${error.field}"]`)
+        : null;
+      const target = input || card;
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      window.setTimeout(() => input?.focus({ preventScroll: true }), 250);
+    }, 50);
+  }
+
   function renderLedger() {
     $('ledger-extra-heading').textContent = state.ledgerType === 'teacher' ? '과목' : state.ledgerType === 'instructor' ? '담당내용' : '근무부서';
     if (!state.records.length) {
@@ -1113,23 +1600,65 @@
 
   function renderPreview() {
     const selected = getSelectedRecords().sort((a, b) => dateValue(a.startDate) - dateValue(b.startDate));
-    const capacity = selected.length > 5 ? 10 : 5;
-    const appendixCount = selected.length > 10 ? Math.ceil((selected.length - 10) / 15) : 0;
-    $('template-state').textContent = appendixCount ? `10줄 서식 + 별지 ${appendixCount}장` : `${capacity}줄 서식`;
+    const capacity = deriveMainCareerCapacity(selected);
+    const appendixCapacity = deriveAppendixCapacity(selected.slice(capacity));
+    const remaining = selected.slice(capacity);
+    const appendixChunks = remaining.length ? chunk(remaining, appendixCapacity) : [];
+    const appendixCount = appendixChunks.length;
+    const referenceMap = buildVacationReferenceMap(selected);
+    $('template-state').textContent = appendixCount ? `${capacity}줄 서식 + 별지 ${appendixCount}장` : `${capacity}줄 서식`;
 
     const total = sumDurations(selected.map(record => calculateDuration(record.startDate, record.endDate)));
-    const pages = [buildMainCertificate(selected, capacity, total)];
-    if (appendixCount) {
-      const appendixRecords = selected.slice(10);
-      const chunks = chunk(appendixRecords, 15);
-      chunks.forEach((records, index) => pages.push(buildAppendixPage(records, index + 1, chunks.length)));
-    }
+    const pages = [buildMainCertificate(selected, capacity, total, referenceMap)];
+    appendixChunks.forEach((records, index) => pages.push(buildAppendixPage(records, index + 1, appendixChunks.length, appendixCapacity, referenceMap)));
     $('certificate-pages').innerHTML = pages.join('');
     $('print-certificate').disabled = !selected.length;
     schedulePreviewFit();
   }
 
-  function buildMainCertificate(selected, capacity, total) {
+  function deriveMainCareerCapacity(selected) {
+    const base = selected.length > 5 ? 10 : 5;
+    if (state.ledgerType !== 'instructor') return base;
+    const noteLines = estimateVacationNoteLines(selected.slice(0, base));
+    if (!noteLines) return base;
+    if (base === 10) return noteLines <= 2 ? 9 : 8;
+    return 4;
+  }
+
+  function deriveAppendixCapacity(records) {
+    if (state.ledgerType !== 'instructor') return 15;
+    const noteLines = estimateVacationNoteLines(records);
+    if (!noteLines) return 15;
+    return noteLines <= 2 ? 14 : 13;
+  }
+
+  function estimateVacationNoteLines(records) {
+    return records.reduce((sum, record) => {
+      const periods = getPreviewVacationPeriods(record);
+      return periods.length ? sum + Math.max(1, Math.ceil(periods.length / 2)) : sum;
+    }, 0);
+  }
+
+  function buildVacationReferenceMap(records) {
+    const detailed = records.filter(record => getPreviewVacationPeriods(record).length);
+    const useReferences = detailed.length > 1 || (detailed.length === 1 && records.length > 1);
+    const map = new Map();
+    if (useReferences) detailed.forEach((record, index) => map.set(record.id, `※${index + 1}`));
+    return map;
+  }
+
+  function buildVacationNoteSection(records, referenceMap) {
+    const detailed = records.filter(record => getPreviewVacationPeriods(record).length);
+    if (!detailed.length) return '';
+    const rows = detailed.map(record => {
+      const reference = referenceMap.get(record.id);
+      const label = reference ? `${reference} 방학기간:` : '※ 방학기간:';
+      return `<div class="vacation-note-row"><strong>${label}</strong><span class="vacation-note-periods">${formatVacationPeriodsHtml(getPreviewVacationPeriods(record))}</span><span class="vacation-note-suffix">제외</span></div>`;
+    }).join('');
+    return `<div class="certificate-vacation-notes" aria-label="방학기간 상세 안내">${rows}</div>`;
+  }
+
+  function buildMainCertificate(selected, capacity, total, referenceMap) {
     const person = getSelectedPerson();
     const issueDate = parseDateStrict($('field-issue-date').value);
     const identifier = getPreviewIdentifier(person);
@@ -1146,7 +1675,8 @@
         <tr><th rowspan="2" class="section-label">인적<br />사항</th><th>성명</th><td colspan="3">${escapeHtml($('field-name').value.trim())}</td><th>${identifier.label}</th><td colspan="2">${escapeHtml(identifier.value)}</td></tr>
         <tr><th>주소</th><td colspan="6">${escapeHtml($('field-address').value.trim())}</td></tr>
       </tbody></table>
-      ${buildMainCareerTable(firstPageRecords, capacity, total, selected.length)}
+      ${buildMainCareerTable(firstPageRecords, capacity, total, selected.length, referenceMap)}
+      ${buildVacationNoteSection(firstPageRecords, referenceMap)}
       <table class="certificate-table summary-table"><tbody>
         <tr><th class="section-label">근무연한</th><td colspan="3">${selected.length ? escapeHtml(formatDuration(total)) : ''}</td><th>최종직위 또는 직급</th><td colspan="3">${escapeHtml(finalPosition || '')}</td></tr>
         <tr><th class="section-label">퇴직사유</th><td colspan="7">${escapeHtml($('field-retirement').value.trim())}</td></tr>
@@ -1172,7 +1702,7 @@
     </article>`;
   }
 
-  function buildMainCareerTable(records, capacity, total, selectedCount) {
+  function buildMainCareerTable(records, capacity, total, selectedCount, referenceMap) {
     const isHours = state.certificateMode === 'hours';
     const isTeacher = state.certificateMode === 'teacher';
     const totalRowspan = capacity + 3;
@@ -1185,7 +1715,7 @@
     const rows = [header, '<tr><th>부터</th><th>까지</th><th>연</th><th>월</th><th>일</th></tr>'];
     for (let index = 0; index < capacity; index += 1) {
       const record = records[index];
-      if (record) rows.push(buildCareerRow(record, isHours, isTeacher));
+      if (record) rows.push(buildCareerRow(record, isHours, isTeacher, referenceMap));
       else {
         const blanks = isHours ? 8 : 7;
         const cells = Array.from({ length: blanks }, (_, cellIndex) => `<td>${index === records.length && cellIndex === 5 ? '이하여백' : ''}</td>`).join('');
@@ -1198,14 +1728,16 @@
     return `<table class="certificate-table career-table ${isHours ? 'hours-table' : ''}"><colgroup>${colgroup}</colgroup><tbody>${rows.join('')}</tbody></table>`;
   }
 
-  function buildCareerRow(record, isHours, isTeacher) {
+  function buildCareerRow(record, isHours, isTeacher, referenceMap = new Map()) {
     const duration = calculateDuration(record.startDate, record.endDate);
     const position = state.ledgerType === 'instructor' ? formatInstructorPosition(record) : record.position;
+    const reference = referenceMap.get(record.id) || '';
+    const positionHtml = `${escapeHtml(position).replace(/\n/g, '<br />')}${reference ? ` <span class="vacation-reference">${reference}</span>` : ''}`;
     const extra = isTeacher ? record.subject : state.ledgerType === 'instructor' ? formatInstructorDepartment(record) : record.department;
-    return `<tr><td>${formatDate(record.startDate)}</td><td>${formatDate(record.endDate)}</td><td>${duration.years}</td><td>${duration.months}</td><td>${duration.days}</td><td>${escapeHtml(position)}</td><td>${escapeHtml(extra)}</td>${isHours ? `<td>${escapeHtml(record.hours)}</td>` : ''}</tr>`;
+    return `<tr><td>${formatDate(record.startDate)}</td><td>${formatDate(record.endDate)}</td><td>${duration.years}</td><td>${duration.months}</td><td>${duration.days}</td><td class="career-position-cell">${positionHtml}</td><td>${escapeHtml(extra)}</td>${isHours ? `<td>${escapeHtml(record.hours)}</td>` : ''}</tr>`;
   }
 
-  function buildAppendixPage(records, pageNo, totalPages) {
+  function buildAppendixPage(records, pageNo, totalPages, capacity, referenceMap) {
     const person = getSelectedPerson();
     const identifier = getPreviewIdentifier(person);
     const issueDate = parseDateStrict($('field-issue-date').value);
@@ -1218,15 +1750,16 @@
       ? '<tr><th colspan="2">근무 기간</th><th colspan="3">근무연수</th><th rowspan="2">직급(위)</th><th rowspan="2">근무부서</th><th rowspan="2">소정근로시간</th></tr>'
       : `<tr><th colspan="2">근무 기간</th><th colspan="3">근무연수</th><th rowspan="2">직급(위)</th><th rowspan="2">${isTeacher ? '과목' : '근무부서'}</th></tr>`;
     const rows = [header, '<tr><th>부터</th><th>까지</th><th>연</th><th>월</th><th>일</th></tr>'];
-    for (let index = 0; index < 15; index += 1) {
+    for (let index = 0; index < capacity; index += 1) {
       const record = records[index];
-      if (record) rows.push(buildCareerRow(record, isHours, isTeacher));
+      if (record) rows.push(buildCareerRow(record, isHours, isTeacher, referenceMap));
       else rows.push(`<tr>${Array.from({ length: isHours ? 8 : 7 }, () => '<td></td>').join('')}</tr>`);
     }
     return `<article class="certificate appendix-page" aria-label="경력사항 별지">
       <h1>경 력 사 항 별 지</h1>
       <table class="certificate-table appendix-meta"><tbody><tr><th>성명</th><td>${escapeHtml($('field-name').value.trim())}</td><th>${identifier.label}</th><td>${escapeHtml(identifier.value)}</td></tr></tbody></table>
       <table class="certificate-table career-table appendix-table ${isHours ? 'hours-table' : ''}"><colgroup>${colgroup}</colgroup><tbody>${rows.join('')}</tbody></table>
+      ${buildVacationNoteSection(records, referenceMap)}
       <div class="appendix-footer"><span class="appendix-date">${formatIssueDate(issueDate)}</span><span class="appendix-school">${escapeHtml(state.settings.school)}</span><span class="appendix-page-no">별지 ${pageNo} / ${totalPages}</span></div>
     </article>`;
   }
@@ -1244,9 +1777,11 @@
     $('field-suspension').value = '해당없음';
     state.rrnDisplay = false;
     clearRrnInput();
+    state.vacationOptions.clear();
     setToday();
     updateRetirementFromSelection();
     renderRrnControls();
+    renderVacationOptions();
     renderPreview();
     toast('발급 입력값을 초기화했습니다.');
   }
@@ -1266,6 +1801,11 @@
       if (birth && dateToInput(parsedRrn.birth) !== dateToInput(birth)) return { ok: false, message: '주민등록번호 앞 6자리와 생년월일이 일치하지 않습니다.' };
     }
     if (state.certificateMode === 'hours' && selected.some(record => !record.hours)) return { ok: false, message: '선택한 경력 중 소정근로시간이 입력되지 않은 자료가 있습니다.' };
+    const vacationError = selected.flatMap(record => validateVacationOption(record)).at(0);
+    if (vacationError) {
+      focusVacationIssue(vacationError);
+      return { ok: false, message: vacationError.message };
+    }
     return { ok: true };
   }
 
@@ -1478,6 +2018,7 @@
     clearRrnInput();
     state.selectedPersonKey = null;
     state.selectedRecordIds.clear();
+    state.vacationOptions.clear();
     clearIssueFields(true);
     renderAll();
     toast('불러온 대장을 비웠습니다.');
@@ -1679,6 +2220,7 @@
   function diffDays(a, b) { return Math.round((Date.UTC(b.getFullYear(), b.getMonth(), b.getDate()) - Date.UTC(a.getFullYear(), a.getMonth(), a.getDate())) / 86400000); }
   function formatDuration(duration) { return `${duration.years}년 ${duration.months}월 ${duration.days}일`; }
   function formatDate(date) { return date ? `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}.` : '-'; }
+  function formatDateNatural(date) { return date ? `${date.getFullYear()}. ${date.getMonth() + 1}. ${date.getDate()}.` : ''; }
   function formatIssueDate(date) { return date ? `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일` : ''; }
   function dateToInput(date) { return date ? `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` : ''; }
   function safeInputDate(value) { const date = parseDateStrict(value); return date ? dateToInput(date) : ''; }
@@ -1730,7 +2272,7 @@
     if (record.weeklyHours !== null) details.push(`주당${formatPlainNumber(record.weeklyHours)}시간`);
     if (record.totalWeeks !== null) details.push(`총${formatPlainNumber(record.totalWeeks)}주`);
     const base = details.length ? `${role}(${details.join(', ')})` : role;
-    return record.vacationExcluded === true ? `${base}\n방학기간제외` : base;
+    return getVacationOption(record).mode === 'excluded' ? `${base}\n방학기간 제외` : base;
   }
 
   function formatInstructorDepartment(record) {
@@ -1757,6 +2299,7 @@
   function chunk(items, size) { return Array.from({ length: Math.ceil(items.length / size) }, (_, index) => items.slice(index * size, index * size + size)); }
   function escapeHtml(value) { return text(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]); }
   function escapeAttr(value) { return escapeHtml(value); }
+  function cssEscape(value) { return window.CSS?.escape ? CSS.escape(String(value)) : String(value).replace(/[^a-zA-Z0-9_-]/g, char => `\\${char}`); }
 
   function toast(message, isError = false) {
     els.toast.textContent = message;

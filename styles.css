@@ -644,3 +644,193 @@ button.status-pill.actionable:focus-visible {
   .dialog-actions { padding: 13px 18px; }
 }
 .person-meta .needs-input { color: var(--warning); font-weight: 800; }
+
+/* v0.5.1: 시간강사·전문강사 방학기간 발급 옵션 */
+.vacation-options-section {
+  margin-top: 2px;
+  padding-top: 17px !important;
+  border-top: 1px solid var(--line);
+}
+.vacation-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 11px;
+}
+.vacation-section-heading .field-caption { margin-bottom: 2px; }
+.vacation-section-heading .field-help { margin-top: 3px; }
+.temporary-chip,
+.vacation-source-chip {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 800;
+}
+.temporary-chip { padding: 5px 8px; color: #4338ca; background: var(--primary-soft); }
+.vacation-source-chip { padding: 4px 7px; color: #667085; background: #f2f4f7; }
+.vacation-options-list { display: grid; gap: 12px; }
+.vacation-option-card {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fbfcfe;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.vacation-option-card.has-error { border-color: #fecaca; box-shadow: 0 0 0 3px rgba(220,38,38,.05); }
+.vacation-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 11px;
+}
+.vacation-card-heading strong { display: block; color: var(--ink); font-size: 13.5px; line-height: 1.4; }
+.vacation-card-heading span:not(.vacation-source-chip) { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; }
+.vacation-card-heading .vacation-range-help { margin-top: 5px; color: #4f46e5; font-size: 11px; font-weight: 750; }
+.vacation-mode-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.vacation-mode-card {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #fff;
+  color: #475467;
+  text-align: left;
+  transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+}
+.vacation-mode-card:hover { border-color: #b9befa; background: #fafaff; }
+.vacation-mode-card:focus-visible { outline: 3px solid rgba(79,70,229,.2); outline-offset: 2px; }
+.vacation-mode-card.is-active { border-color: var(--primary); background: var(--primary-soft); box-shadow: 0 0 0 2px rgba(79,70,229,.05); color: var(--primary-dark); }
+.vacation-radio-dot {
+  width: 15px;
+  height: 15px;
+  margin-top: 1px;
+  border: 1.5px solid #98a2b3;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: inset 0 0 0 3px #fff;
+}
+.vacation-mode-card.is-active .vacation-radio-dot { border-color: var(--primary); background: var(--primary); }
+.vacation-mode-card strong { display: block; font-size: 12.5px; line-height: 1.35; }
+.vacation-mode-card small { display: block; margin-top: 3px; color: var(--muted); font-size: 10.5px; line-height: 1.35; font-weight: 600; }
+.vacation-detail-panel { margin-top: 11px; padding-top: 11px; border-top: 1px solid var(--line); }
+.vacation-period-list { display: grid; gap: 9px; }
+.vacation-period-card { padding: 12px; border: 1px solid #dfe3eb; border-radius: 12px; background: #fff; }
+.vacation-period-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.vacation-period-heading strong { font-size: 12.5px; }
+.vacation-remove-button,
+.vacation-add-button {
+  border-radius: 9px;
+  font-weight: 800;
+  font-size: 11.5px;
+}
+.vacation-remove-button { padding: 5px 8px; border: 0; background: #f2f4f7; color: #667085; }
+.vacation-remove-button:hover { background: #eaecf0; color: #344054; }
+.vacation-add-button { width: 100%; margin-top: 9px; padding: 9px 11px; border: 1px dashed #a5b4fc; background: #fafaff; color: var(--primary-dark); }
+.vacation-add-button:hover { border-style: solid; background: var(--primary-soft); }
+.vacation-remove-button:focus-visible,
+.vacation-add-button:focus-visible { outline: 3px solid rgba(79,70,229,.2); outline-offset: 2px; }
+.vacation-type-field,
+.vacation-date-field { display: grid; gap: 6px; margin-top: 9px; color: #475467; font-size: 12px; font-weight: 750; }
+.vacation-type-field { margin-top: 0; }
+.vacation-type-field > span { display: flex; align-items: baseline; gap: 5px; }
+.vacation-type-field small { color: var(--muted); font-size: 10.5px; font-weight: 650; }
+.vacation-type-field select {
+  width: 100%;
+  padding: 10px 34px 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #fff;
+  color: var(--ink);
+  outline: none;
+}
+.vacation-type-field select:focus { border-color: #9da5ff; box-shadow: 0 0 0 3px rgba(79,70,229,.09); }
+.vacation-date-input {
+  width: 100%;
+  padding: 10px 47px 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #fff;
+  outline: none;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.vacation-date-input:focus { border-color: #9da5ff; box-shadow: 0 0 0 3px rgba(79,70,229,.09); }
+.vacation-date-input.is-invalid { border-color: var(--danger); box-shadow: 0 0 0 3px rgba(220,38,38,.09); }
+.vacation-field-message { min-height: 0; color: var(--danger); font-size: 11.5px; font-weight: 700; line-height: 1.4; }
+.vacation-field-message:empty { display: none; }
+.vacation-field-message > span { display: block; }
+.vacation-quick-fix {
+  margin-top: 6px;
+  padding: 6px 9px;
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  background: #fff;
+  color: #b42318;
+  font-size: 11px;
+  font-weight: 850;
+}
+.vacation-quick-fix:hover { background: #fff5f5; border-color: #f87171; }
+.vacation-quick-fix:focus-visible { outline: 3px solid rgba(220,38,38,.16); outline-offset: 2px; }
+.vacation-card-alert { margin-top: 9px; padding: 9px 10px; border: 1px solid #fecaca; border-radius: 10px; background: var(--danger-soft); color: #991b1b; white-space: pre-line; font-size: 11.5px; font-weight: 700; line-height: 1.45; }
+.vacation-output-preview { margin-top: 10px; padding: 10px 11px; border: 1px solid #dfe3ff; border-radius: 11px; background: #f8f8ff; }
+.vacation-output-preview.has-error { border-color: #fecaca; background: #fff8f8; }
+.vacation-output-preview > span { display: block; color: #4f46e5; font-size: 10.5px; font-weight: 850; }
+.vacation-output-preview p { margin: 5px 0 0; color: #344054; font-size: 12px; line-height: 1.55; word-break: keep-all; }
+.vacation-output-preview p strong { font-weight: 850; }
+.vacation-preview-valid { display: block; }
+.vacation-preview-issues { display: grid; gap: 3px; margin-top: 6px; color: #b42318; font-size: 11.5px; font-weight: 750; }
+.vacation-preview-empty { color: var(--muted); }
+.vacation-type-label { font-weight: 800; white-space: nowrap; }
+.vacation-period-text { white-space: nowrap; }
+.vacation-comma { white-space: normal; }
+
+.career-position-cell { white-space: normal; }
+.vacation-reference { font-size: .82em; font-weight: 700; vertical-align: super; white-space: nowrap; }
+.certificate-vacation-notes {
+  width: 100%;
+  margin: 0 0 -1px;
+  padding: 1.5mm 3mm 1.5mm;
+  border: 1px solid #111;
+  border-top: 0;
+  color: #111;
+  font-size: 8.4pt;
+  line-height: 1.45;
+  text-align: left;
+  break-inside: avoid;
+}
+.vacation-note-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 1.2mm; }
+.vacation-note-row + .vacation-note-row { margin-top: 1.2mm; }
+.vacation-note-row strong { flex: 0 0 auto; font-weight: 700; }
+.vacation-note-periods { display: inline; }
+.vacation-note-suffix { white-space: nowrap; }
+
+@media (max-width: 640px) {
+  .vacation-section-heading { display: grid; }
+  .temporary-chip { justify-self: start; }
+  .vacation-card-heading { display: grid; }
+  .vacation-source-chip { justify-self: start; }
+  .vacation-mode-grid { grid-template-columns: 1fr; }
+  .vacation-mode-card { padding: 11px; }
+}
+
+.vacation-date-field .native-date-picker {
+  position: absolute;
+  right: 8px;
+  bottom: 5px;
+  width: 1px;
+  height: 1px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}

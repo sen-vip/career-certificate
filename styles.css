@@ -874,3 +874,26 @@ button.status-pill.actionable:focus-visible {
   .followup-preview { display: grid; grid-template-columns: 1fr; }
   .followup-preview > span[aria-hidden="true"] { display: none; }
 }
+
+
+/* v0.6.1: 날짜 한쪽만 있는 행의 퇴직 발령 가능성 확인 */
+.followup-card.needs-reason { border-color: #fcd34d; background: #fffdf5; }
+.followup-reason-box {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+}
+.followup-reason-box label { display: grid; gap: 5px; color: #344054; font-size: 12px; font-weight: 700; }
+.followup-reason-box select,
+.followup-reason-box input {
+  width: 100%; min-width: 0; height: 38px; padding: 0 10px;
+  border: 1px solid #d0d5dd; border-radius: 8px; background: #fff;
+  color: #101828; font: inherit; font-weight: 600;
+}
+.followup-reason-box select:focus-visible,
+.followup-reason-box input:focus-visible { outline: 2px solid #6366f1; outline-offset: 1px; border-color: #6366f1; }
+.followup-actions .btn:disabled { opacity: .45; cursor: not-allowed; }

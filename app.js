@@ -887,9 +887,13 @@
     const appointmentDate = parseDateStrict(appointmentDateRaw);
     const appointmentText = text(row.appointmentText);
     const rawRetirement = text(row.retirement);
-    const terminationText = findTerminationEventText([endRaw, rawRetirement, appointmentText, row.note, row.checkMemo]);
-    const followUpDate = startDate || appointmentDate;
-    const isFollowUpEvent = Boolean(followUpDate && !endDate && terminationText);
+    const terminationText = findTerminationEventText([startRaw, endRaw, rawRetirement, appointmentText, row.note, row.checkMemo]);
+    const hasSingleBoundaryDate = Boolean(startDate) !== Boolean(endDate);
+    const singleBoundaryDate = hasSingleBoundaryDate ? (startDate || endDate) : null;
+    const singleBoundaryField = hasSingleBoundaryDate ? (startDate ? 'start' : 'end') : '';
+    const followUpDate = singleBoundaryDate || ((!startDate && !endDate) ? appointmentDate : null);
+    const isFollowUpEvent = Boolean(followUpDate && terminationText);
+    const possibleFollowUpDate = !isFollowUpEvent && singleBoundaryDate ? singleBoundaryDate : null;
 
     return {
       id: `record-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
@@ -900,6 +904,12 @@
       followUpDate: isFollowUpEvent ? followUpDate : null,
       followUpText: isFollowUpEvent ? terminationText : '',
       followUpCandidateId: '',
+      followUpReasonRequired: false,
+      followUpReasonChoice: isFollowUpEvent && terminationText ? terminationText : '',
+      followUpOtherReason: '',
+      followUpDetectedBy: isFollowUpEvent ? 'explicit-text' : '',
+      possibleFollowUpDate,
+      possibleFollowUpField: singleBoundaryField,
       linkedCareerId: '',
       followUpApplied: null,
       originalEndDate: null,
@@ -958,44 +968,97 @@
     return '';
   }
 
+  function findFollowUpCandidates(eventRecord, followUpDate) {
+    if (!eventRecord || !followUpDate || !eventRecord.name) return [];
+    return state.records.filter(record => {
+      if (record.recordKind !== 'career' || record.id === eventRecord.id || record.name !== eventRecord.name) return false;
+      if (record.followUpStatus === 'linked') return false;
+      if (eventRecord.birth && record.birth && eventRecord.birth !== record.birth) return false;
+      if (!record.startDate || !record.endDate) return false;
+      return followUpDate >= record.startDate && followUpDate <= record.endDate;
+    }).sort((a, b) => {
+      const spanA = dateValue(a.endDate) - dateValue(a.startDate);
+      const spanB = dateValue(b.endDate) - dateValue(b.startDate);
+      if (spanA !== spanB) return spanA - spanB;
+      return dateValue(b.startDate) - dateValue(a.startDate);
+    });
+  }
+
+  function chooseFollowUpCandidate(eventRecord, candidates) {
+    if (candidates.length === 1) return candidates[0];
+    if (candidates.length > 1) {
+      const exactIdentity = candidates.filter(record =>
+        (eventRecord.rrn && record.rrn && eventRecord.rrn === record.rrn)
+        || (eventRecord.birth && record.birth && eventRecord.birth === record.birth)
+      );
+      if (exactIdentity.length === 1) return exactIdentity[0];
+    }
+    return null;
+  }
+
   function refreshFollowUpCandidates() {
+    // 이미 후속 발령으로 판정된 행의 연결 후보를 다시 계산한다.
     state.records.forEach(record => {
       if (record.recordKind === 'followup' && record.followUpStatus === 'pending') record.followUpCandidateId = '';
     });
 
+    // 시작일/종료일 중 한쪽에만 날짜가 있고 발령사유는 없는 행도,
+    // 같은 사람의 기존 경력기간 안에 들어오면 '퇴직 발령일 가능성'으로 제안한다.
+    state.records.forEach(record => {
+      if (record.recordKind === 'followup' || record.followUpStatus === 'standalone') return;
+      if (!record.possibleFollowUpDate || !record.name) return;
+      const candidates = findFollowUpCandidates(record, record.possibleFollowUpDate);
+      const target = chooseFollowUpCandidate(record, candidates);
+      if (!target) return;
+
+      record.recordKind = 'followup';
+      record.followUpStatus = 'pending';
+      record.followUpDate = new Date(record.possibleFollowUpDate);
+      record.followUpText = '';
+      record.followUpReasonRequired = true;
+      record.followUpDetectedBy = 'single-date';
+      record.followUpCandidateId = target.id;
+    });
+
     const pendingEvents = state.records.filter(record => record.recordKind === 'followup' && record.followUpStatus === 'pending' && record.followUpDate && record.name);
     pendingEvents.forEach(eventRecord => {
-      const candidates = state.records.filter(record => {
-        if (record.recordKind !== 'career' || record.id === eventRecord.id || record.name !== eventRecord.name) return false;
-        if (eventRecord.birth && record.birth && eventRecord.birth !== record.birth) return false;
-        if (!record.startDate || !record.endDate) return false;
-        return eventRecord.followUpDate >= record.startDate && eventRecord.followUpDate <= record.endDate;
-      }).sort((a, b) => {
-        const spanA = dateValue(a.endDate) - dateValue(a.startDate);
-        const spanB = dateValue(b.endDate) - dateValue(b.startDate);
-        if (spanA !== spanB) return spanA - spanB;
-        return dateValue(b.startDate) - dateValue(a.startDate);
-      });
-
-      if (candidates.length === 1) {
-        eventRecord.followUpCandidateId = candidates[0].id;
-        return;
-      }
-
-      if (candidates.length > 1) {
-        const exactIdentity = candidates.filter(record =>
-          (eventRecord.rrn && record.rrn && eventRecord.rrn === record.rrn)
-          || (eventRecord.birth && record.birth && eventRecord.birth === record.birth)
-        );
-        if (exactIdentity.length === 1) eventRecord.followUpCandidateId = exactIdentity[0].id;
-      }
+      const candidates = findFollowUpCandidates(eventRecord, eventRecord.followUpDate);
+      const target = chooseFollowUpCandidate(eventRecord, candidates);
+      if (target) eventRecord.followUpCandidateId = target.id;
     });
+  }
+
+  function setFollowUpReason(eventId, value) {
+    const eventRecord = state.records.find(record => record.id === eventId);
+    if (!eventRecord) return;
+    eventRecord.followUpReasonChoice = value || '';
+    if (value === '__other__') eventRecord.followUpText = text(eventRecord.followUpOtherReason);
+    else eventRecord.followUpText = text(value);
+    analyzeRecords();
+    renderAll();
+  }
+
+  function setFollowUpOtherReason(eventId, value) {
+    const eventRecord = state.records.find(record => record.id === eventId);
+    if (!eventRecord) return;
+    eventRecord.followUpOtherReason = text(value);
+    if (eventRecord.followUpReasonChoice === '__other__') eventRecord.followUpText = eventRecord.followUpOtherReason;
+    analyzeRecords();
+    renderAll();
+    window.setTimeout(() => {
+      const input = els.careerList.querySelector(`[data-followup-other="${cssEscape(eventId)}"]`);
+      if (input) {
+        input.focus({ preventScroll: true });
+        input.setSelectionRange(input.value.length, input.value.length);
+      }
+    }, 0);
   }
 
   function applyFollowUpEvent(eventId) {
     const eventRecord = state.records.find(record => record.id === eventId);
     const target = eventRecord ? state.records.find(record => record.id === eventRecord.followUpCandidateId) : null;
-    if (!eventRecord || !target || !eventRecord.followUpDate || !eventRecord.followUpText) return toast('연결할 경력을 확인해 주세요.', true);
+    if (!eventRecord || !target || !eventRecord.followUpDate) return toast('연결할 경력을 확인해 주세요.', true);
+    if (!eventRecord.followUpText) return toast('퇴직사유를 먼저 확인해 주세요.', true);
 
     if (!target.originalEndDate) {
       target.originalEndDate = target.endDate ? new Date(target.endDate) : null;
@@ -1015,6 +1078,7 @@
 
     eventRecord.followUpStatus = 'linked';
     eventRecord.linkedCareerId = target.id;
+    eventRecord.followUpReasonRequired = false;
     state.selectedRecordIds.delete(eventRecord.id);
     analyzeRecords();
     renderAll();
@@ -1030,8 +1094,9 @@
     analyzeRecords();
     renderAll();
     const index = state.records.indexOf(eventRecord);
-    toast('후속 발령을 별도 행으로 두었습니다. 필요한 정보를 확인해 주세요.');
-    if (index >= 0) window.setTimeout(() => openEditDialog(index, 'edit-end'), 80);
+    const focusField = eventRecord.startDate && !eventRecord.endDate ? 'edit-end' : (!eventRecord.startDate && eventRecord.endDate ? 'edit-start' : 'edit-end');
+    toast(eventRecord.followUpDetectedBy === 'single-date' ? '퇴직 발령 아님으로 두었습니다. 빠진 근무기간을 확인해 주세요.' : '후속 발령을 별도 행으로 두었습니다. 필요한 정보를 확인해 주세요.');
+    if (index >= 0) window.setTimeout(() => openEditDialog(index, focusField), 80);
   }
 
   function undoAppliedFollowUp(recordId) {
@@ -1071,13 +1136,17 @@
           return;
         }
         if (record.followUpStatus === 'pending') {
-          if (!record.followUpDate) issues.push(issue('error', '후속 발령일자를 날짜로 읽을 수 없습니다.', 'edit-start'));
-          if (!record.followUpText) issues.push(issue('error', '후속 발령사항을 확인해 주세요.', 'edit-retirement'));
+          if (!record.followUpDate) issues.push(issue('error', '후속 발령일자를 날짜로 읽을 수 없습니다.', record.possibleFollowUpField === 'end' ? 'edit-end' : 'edit-start'));
           if (record.followUpCandidateId) {
             const target = state.records.find(item => item.id === record.followUpCandidateId);
-            issues.push(issue('warning', `후속 발령 확인: ${formatDateNatural(record.followUpDate)} ${record.followUpText}을 ${target ? formatRecordPeriod(target) : '기존 경력'}에 연결할 수 있습니다.`));
+            if (record.followUpReasonRequired && !record.followUpText) {
+              issues.push(issue('warning', `퇴직 발령일 가능성: ${formatDateNatural(record.followUpDate)}에 별도 날짜가 있습니다. ${target ? formatRecordPeriod(target) : '이전 경력'}의 퇴직사유를 확인해 주세요.`));
+            } else {
+              issues.push(issue('warning', `후속 발령 확인: ${formatDateNatural(record.followUpDate)} ${record.followUpText || '발령사항 확인 필요'}을 ${target ? formatRecordPeriod(target) : '기존 경력'}에 연결할 수 있습니다.`));
+            }
           } else {
-            issues.push(issue('error', '후속 퇴직·면직 발령으로 보이지만 연결할 기존 경력을 찾지 못했습니다. 별도 행으로 두고 직접 확인해 주세요.', 'edit-end'));
+            if (!record.followUpText) issues.push(issue('warning', '퇴직 발령일 가능성이 있으나 연결할 기존 경력을 찾지 못했습니다. 별도 행으로 두고 직접 확인해 주세요.'));
+            else issues.push(issue('error', '후속 퇴직·면직 발령으로 보이지만 연결할 기존 경력을 찾지 못했습니다. 별도 행으로 두고 직접 확인해 주세요.', 'edit-end'));
           }
           record.issues = issues;
           return;
@@ -1313,32 +1382,52 @@
     const followUpHtml = (person.pendingEvents || []).map(eventRecord => {
       const target = state.records.find(record => record.id === eventRecord.followUpCandidateId);
       const dateLabel = eventRecord.followUpDate ? formatDateNatural(eventRecord.followUpDate) : '발령일 확인 필요';
+      const isInferred = eventRecord.followUpDetectedBy === 'single-date' || eventRecord.followUpReasonRequired;
       if (!target) {
         return `<div class="followup-card has-error">
           <div class="followup-card-head">
             <span class="status-pill error">후속 발령 확인</span>
-            <strong>${escapeHtml(`${dateLabel} · ${eventRecord.followUpText || '발령사항 확인 필요'}`)}</strong>
+            <strong>${escapeHtml(`${dateLabel} · ${eventRecord.followUpText || (isInferred ? '퇴직 발령 여부 확인 필요' : '발령사항 확인 필요')}`)}</strong>
           </div>
-          <p>퇴직·면직 발령으로 보이지만 연결할 기존 경력을 찾지 못했습니다.</p>
+          <p>${isInferred ? '근무기간 한쪽에만 날짜가 있습니다. 퇴직 발령일 수 있으나 연결할 기존 경력을 찾지 못했습니다.' : '퇴직·면직 발령으로 보이지만 연결할 기존 경력을 찾지 못했습니다.'}</p>
           <div class="followup-actions">
-            <button class="btn small ghost" data-standalone-followup="${escapeAttr(eventRecord.id)}" type="button">별도 행으로 두기</button>
+            <button class="btn small ghost" data-standalone-followup="${escapeAttr(eventRecord.id)}" type="button">직접 확인하기</button>
           </div>
         </div>`;
       }
-      return `<div class="followup-card">
+
+      const reasonChoice = eventRecord.followUpReasonChoice || '';
+      const reasonSelect = isInferred ? `<div class="followup-reason-box">
+        <label>
+          <span>퇴직사유 확인</span>
+          <select data-followup-reason="${escapeAttr(eventRecord.id)}" aria-label="${escapeAttr(`${dateLabel} 퇴직사유 선택`)}">
+            <option value="" ${!reasonChoice ? 'selected' : ''}>퇴직사유를 선택해주세요</option>
+            <option value="의원면직" ${reasonChoice === '의원면직' ? 'selected' : ''}>의원면직</option>
+            <option value="기간만료" ${reasonChoice === '기간만료' ? 'selected' : ''}>기간만료</option>
+            <option value="계약해지" ${reasonChoice === '계약해지' ? 'selected' : ''}>계약해지</option>
+            <option value="중도퇴직" ${reasonChoice === '중도퇴직' ? 'selected' : ''}>중도퇴직</option>
+            <option value="퇴직" ${reasonChoice === '퇴직' ? 'selected' : ''}>퇴직</option>
+            <option value="__other__" ${reasonChoice === '__other__' ? 'selected' : ''}>기타 직접 입력</option>
+          </select>
+        </label>
+        ${reasonChoice === '__other__' ? `<label><span>기타 퇴직사유</span><input data-followup-other="${escapeAttr(eventRecord.id)}" type="text" value="${escapeAttr(eventRecord.followUpOtherReason || '')}" placeholder="예: 당연퇴직" /></label>` : ''}
+      </div>` : '';
+
+      return `<div class="followup-card ${isInferred && !eventRecord.followUpText ? 'needs-reason' : ''}">
         <div class="followup-card-head">
-          <span class="status-pill warning">후속 발령 발견</span>
-          <strong>${escapeHtml(`${dateLabel} · ${eventRecord.followUpText}`)}</strong>
+          <span class="status-pill warning">${isInferred ? '퇴직 발령일 가능성' : '후속 발령 발견'}</span>
+          <strong>${escapeHtml(isInferred ? `${dateLabel} · 퇴직사유 확인 필요` : `${dateLabel} · ${eventRecord.followUpText}`)}</strong>
         </div>
-        <p><strong>${escapeHtml(formatRecordPeriod(target))}</strong> 경력의 실제 종료 발령으로 연결할 수 있습니다.</p>
+        <p>${isInferred ? `근무기간의 ${eventRecord.possibleFollowUpField === 'end' ? '종료일' : '시작일'} 칸에 날짜만 입력된 별도 행입니다. 아래 경력의 실제 퇴직 발령인지 확인해주세요.` : '아래 경력의 실제 종료 발령으로 연결할 수 있습니다.'}</p>
         <div class="followup-preview">
-          <span>당초 종료일 <strong>${escapeHtml(formatDateNatural(target.endDate))}</strong></span>
+          <span>기존 경력 <strong>${escapeHtml(formatRecordPeriod(target))}</strong></span>
           <span aria-hidden="true">→</span>
-          <span>반영 후 <strong>${escapeHtml(`${dateLabel} · ${eventRecord.followUpText}`)}</strong></span>
+          <span>반영 시 종료 <strong>${escapeHtml(`${dateLabel}${eventRecord.followUpText ? ` · ${eventRecord.followUpText}` : ''}`)}</strong></span>
         </div>
+        ${reasonSelect}
         <div class="followup-actions">
-          <button class="btn small primary" data-apply-followup="${escapeAttr(eventRecord.id)}" type="button">경력에 반영</button>
-          <button class="btn small ghost" data-standalone-followup="${escapeAttr(eventRecord.id)}" type="button">별도 발령으로 두기</button>
+          <button class="btn small primary" data-apply-followup="${escapeAttr(eventRecord.id)}" type="button" ${isInferred && !eventRecord.followUpText ? 'disabled' : ''}>${isInferred ? '이전 경력의 퇴직으로 반영' : '경력에 반영'}</button>
+          <button class="btn small ghost" data-standalone-followup="${escapeAttr(eventRecord.id)}" type="button">${isInferred ? '퇴직 발령 아님' : '별도 발령으로 두기'}</button>
         </div>
       </div>`;
     }).join('');
@@ -1381,6 +1470,8 @@
 
     els.careerList.querySelectorAll('[data-record-id]').forEach(input => input.addEventListener('change', () => toggleRecord(input.dataset.recordId, input.checked)));
     els.careerList.querySelectorAll('[data-open-record-id]').forEach(button => button.addEventListener('click', () => openRecordIssue(button.dataset.openRecordId, button.dataset.focusField)));
+    els.careerList.querySelectorAll('[data-followup-reason]').forEach(select => select.addEventListener('change', () => setFollowUpReason(select.dataset.followupReason, select.value)));
+    els.careerList.querySelectorAll('[data-followup-other]').forEach(input => input.addEventListener('input', () => setFollowUpOtherReason(input.dataset.followupOther, input.value)));
     els.careerList.querySelectorAll('[data-apply-followup]').forEach(button => button.addEventListener('click', () => applyFollowUpEvent(button.dataset.applyFollowup)));
     els.careerList.querySelectorAll('[data-standalone-followup]').forEach(button => button.addEventListener('click', () => keepFollowUpStandalone(button.dataset.standaloneFollowup)));
     els.careerList.querySelectorAll('[data-undo-followup]').forEach(button => button.addEventListener('click', () => undoAppliedFollowUp(button.dataset.undoFollowup)));
@@ -1418,6 +1509,9 @@
       const visible = notices.slice(0, 8);
       const rows = visible.map(({ record, item }) => {
         const period = formatRecordPeriod(record);
+        if (record.recordKind === 'followup' && record.followUpStatus === 'pending') {
+          return `<button class="alert-action" data-focus-followup="${escapeAttr(record.id)}" type="button">• ${escapeHtml(period)} · ${escapeHtml(item.message)}</button>`;
+        }
         return `<button class="alert-action" data-open-record-id="${escapeAttr(record.id)}" data-focus-field="${escapeAttr(item.field || '')}" type="button">• ${escapeHtml(period)} · ${escapeHtml(item.message)}</button>`;
       }).join('');
       const more = notices.length > visible.length ? `<p class="alert-more">그 밖의 ${notices.length - visible.length}건은 대장 점검 화면에서 확인할 수 있습니다.</p>` : '';
@@ -1426,10 +1520,21 @@
 
     els.careerAlert.innerHTML = sections.join('');
     els.careerAlert.querySelectorAll('[data-focus-applicant="birth"]').forEach(button => button.addEventListener('click', focusApplicantBirth));
+    els.careerAlert.querySelectorAll('[data-focus-followup]').forEach(button => button.addEventListener('click', () => focusFollowUpCard(button.dataset.focusFollowup)));
     els.careerAlert.querySelectorAll('[data-open-record-id]').forEach(button => button.addEventListener('click', () => openRecordIssue(button.dataset.openRecordId, button.dataset.focusField)));
   }
 
+  function focusFollowUpCard(recordId) {
+    const target = els.careerList.querySelector(`[data-followup-reason="${cssEscape(recordId)}"]`)
+      || els.careerList.querySelector(`[data-apply-followup="${cssEscape(recordId)}"]`)
+      || els.careerList.querySelector(`[data-standalone-followup="${cssEscape(recordId)}"]`);
+    const card = target?.closest('.followup-card');
+    card?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    window.setTimeout(() => target?.focus({ preventScroll: true }), 280);
+  }
+
   function formatRecordPeriod(record) {
+    if (record?.recordKind === 'followup' && record.followUpDate) return `후속 발령 ${formatDate(record.followUpDate)}`;
     return `${formatDate(record.startDate)} ~ ${formatDate(record.endDate)}`;
   }
 
@@ -1817,7 +1922,7 @@
       const issueHtml = record.issues.length ? record.issues.map(item => `<div class="${item.level === 'error' ? 'error-text' : 'warning-text'}">• ${escapeHtml(item.message)}</div>`).join('') : '점검 결과 이상 없음';
       const isPendingFollowUp = record.recordKind === 'followup' && record.followUpStatus === 'pending';
       const periodHtml = isPendingFollowUp
-        ? `<strong>후속 발령</strong><br>${formatDate(record.followUpDate)}`
+        ? `<strong>${record.followUpReasonRequired ? '퇴직 발령일 가능성' : '후속 발령'}</strong><br>${formatDate(record.followUpDate)}`
         : `${formatDate(record.startDate)}<br>~ ${formatDate(record.endDate)}`;
       const actionHtml = isPendingFollowUp
         ? `<button class="edit-row" data-standalone-ledger="${escapeAttr(record.id)}" type="button">별도 행으로 두기</button>`
@@ -1829,7 +1934,7 @@
         <td>${periodHtml}</td>
         <td>${escapeHtml(record.position || '-')}</td>
         <td>${escapeHtml((state.ledgerType === 'teacher' ? record.subject : state.ledgerType === 'instructor' ? formatInstructorDepartment(record) : record.department) || '-')}</td>
-        <td>${escapeHtml(record.retirement || record.followUpText || '-')}</td>
+        <td>${escapeHtml(record.retirement || record.followUpText || (record.followUpReasonRequired ? '퇴직사유 확인 필요' : '-'))}</td>
         <td class="issue-text">${issueHtml}</td>
         <td>${actionHtml}</td>
       </tr>`;
@@ -2048,6 +2153,11 @@
       if (birth && dateToInput(parsedRrn.birth) !== dateToInput(birth)) return { ok: false, message: '주민등록번호 앞 6자리와 생년월일이 일치하지 않습니다.' };
     }
     if (state.certificateMode === 'hours' && selected.some(record => !record.hours)) return { ok: false, message: '선택한 경력 중 소정근로시간이 입력되지 않은 자료가 있습니다.' };
+    const unresolvedFollowUp = getPendingFollowUpEvents().find(eventRecord => eventRecord.followUpCandidateId && state.selectedRecordIds.has(eventRecord.followUpCandidateId));
+    if (unresolvedFollowUp) {
+      const dateLabel = unresolvedFollowUp.followUpDate ? formatDateNatural(unresolvedFollowUp.followUpDate) : '날짜 미확인';
+      return { ok: false, message: `${dateLabel} 퇴직 발령 가능성을 먼저 확인해 주세요.` };
+    }
     const vacationError = selected.flatMap(record => validateVacationOption(record)).at(0);
     if (vacationError) {
       focusVacationIssue(vacationError);

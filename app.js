@@ -50,6 +50,7 @@
   const TEACHER_DEMO_ROWS = [
     { position: '기간제교사', subject: '국어', name: '가상교원', identity: '1990-01-01', start: '2024-03-01', end: '2025-02-28' },
     { position: '기간제교사', subject: '국어', name: '가상교원', identity: '900101-1234567', start: '2025-03-01', end: '2025-08-31' },
+    { position: '기간제교사', subject: '국어', name: '가상교원', identity: '900101-1234567', start: '2025-07-17', end: '의원면직' },
     { position: '기간제교사', subject: '', name: '예시교원', identity: '1992-05-15', start: '2023-03-01', end: '2024-02-29' },
     { position: '기간제교사', subject: '수학', name: '종료확인', identity: '1988-07-07', start: '2024-03-01', end: '' },
     { position: '기간제교사', subject: '영어', name: '기간오류', identity: '1991-09-09', start: '2025-03-01', end: '2025-02-28' }
@@ -65,6 +66,7 @@
 
   const INSTRUCTOR_ROLE_VALUES = ['시간강사', '전문강사'];
   const INSTRUCTOR_DUTY_VALUES = ['교과', '프로그램', '부서'];
+  const TERMINATION_EVENT_KEYWORDS = ['의원면직', '면직', '퇴직', '중도퇴직', '계약해지', '해촉', '사직', '사임', '당연퇴직', '해고'];
   const VACATION_TYPE_LABELS = {
     none: '',
     summer: '여름방학',
@@ -324,9 +326,17 @@
   }
 
   function bindBirthInput() {
-    $('field-birth').addEventListener('input', event => {
+    const field = $('field-birth');
+    field.addEventListener('input', event => {
       const formatted = formatBirthInput(event.target.value);
       if (event.target.value !== formatted) event.target.value = formatted;
+      renderRrnControls();
+      renderCareers();
+      renderPreview();
+    });
+    field.addEventListener('blur', event => {
+      const parsed = parseBirthDateInput(event.target.value);
+      if (parsed) event.target.value = dateToInput(parsed);
       renderRrnControls();
       renderCareers();
       renderPreview();
@@ -780,7 +790,9 @@
       period: valueFor(map, 'period'),
       retirement: valueFor(map, 'retirement'),
       note: valueFor(map, 'note'),
-      hours: valueFor(map, 'hours')
+      hours: valueFor(map, 'hours'),
+      appointmentDate: valueFor(map, 'appointmentDate'),
+      appointmentText: valueFor(map, 'appointmentText')
     };
   }
 
@@ -793,8 +805,10 @@
       identity: valueFor(map, 'identity'),
       start: valueFor(map, 'teacherStart'),
       end: valueFor(map, 'teacherEnd'),
-      retirement: valueFor(map, 'retirement') || '계약기간 만료',
-      note: valueFor(map, 'note')
+      retirement: valueFor(map, 'retirement'),
+      note: valueFor(map, 'note'),
+      appointmentDate: valueFor(map, 'appointmentDate'),
+      appointmentText: valueFor(map, 'appointmentText')
     };
   }
 
@@ -832,6 +846,13 @@
     return key ? map[key] : '';
   }
 
+  function isTemplateExampleRow(row) {
+    return Object.values(row || {}).some(value => {
+      const candidate = text(value);
+      return candidate.includes('[예시]') || /^예\)/.test(candidate) || candidate.includes('입력 예시행');
+    });
+  }
+
   function loadRows(rows, fileName, ledgerType) {
     state.fileName = fileName;
     state.ledgerType = ledgerType;
@@ -842,8 +863,10 @@
     state.selectedRecordIds.clear();
     state.vacationOptions.clear();
     state.records = rows
+      .filter(row => !isTemplateExampleRow(row))
       .map((row, index) => normalizeRecord(row, index, ledgerType))
-      .filter(record => record.name || record.identityRaw || record.startRaw || record.endRaw || record.position || record.dutyContent);
+      .filter(record => record.name || record.identityRaw || record.startRaw || record.endRaw || record.position || record.dutyContent || record.appointmentText);
+    refreshFollowUpCandidates();
     analyzeRecords();
     clearIssueFields(true);
     renderAll();
@@ -858,11 +881,30 @@
     const totalWeeksRaw = row.totalWeeks ?? '';
     const vacationRaw = row.vacationExcluded ?? '';
     const isInstructor = ledgerType === 'instructor';
+    const startDate = parseDateStrict(startRaw);
     const endDate = parseDateStrict(endRaw);
+    const appointmentDateRaw = row.appointmentDate ?? '';
+    const appointmentDate = parseDateStrict(appointmentDateRaw);
+    const appointmentText = text(row.appointmentText);
+    const rawRetirement = text(row.retirement);
+    const terminationText = findTerminationEventText([endRaw, rawRetirement, appointmentText, row.note, row.checkMemo]);
+    const followUpDate = startDate || appointmentDate;
+    const isFollowUpEvent = Boolean(followUpDate && !endDate && terminationText);
+
     return {
       id: `record-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
       sourceIndex: index + 2,
       ledgerType,
+      recordKind: isFollowUpEvent ? 'followup' : 'career',
+      followUpStatus: isFollowUpEvent ? 'pending' : '',
+      followUpDate: isFollowUpEvent ? followUpDate : null,
+      followUpText: isFollowUpEvent ? terminationText : '',
+      followUpCandidateId: '',
+      linkedCareerId: '',
+      followUpApplied: null,
+      originalEndDate: null,
+      originalEndRaw: '',
+      originalRetirement: '',
       name: text(row.name),
       identityRaw: identityRaw instanceof Date ? dateToInput(identityRaw) : text(identityRaw),
       identityKind: identity.kind,
@@ -874,16 +916,18 @@
       payType: ledgerType === 'general' ? text(row.payType) : '',
       startRaw,
       endRaw,
-      startDate: parseDateStrict(startRaw),
+      startDate,
       endDate,
       period: text(row.period),
-      retirement: ledgerType === 'teacher'
-        ? (text(row.retirement) || '계약기간 만료')
-        : isInstructor ? (endDate ? '계약기간 만료' : '') : text(row.retirement),
+      retirement: isFollowUpEvent
+        ? terminationText
+        : ledgerType === 'teacher'
+          ? (rawRetirement || (endDate ? '계약기간 만료' : ''))
+          : isInstructor ? (endDate ? '계약기간 만료' : '') : rawRetirement,
       note: isInstructor ? text(row.checkMemo) : text(row.note),
       hours: ledgerType === 'general' ? text(row.hours) : '',
-      appointmentDateRaw: isInstructor ? row.appointmentDate ?? '' : '',
-      appointmentDate: isInstructor ? parseDateStrict(row.appointmentDate) : null,
+      appointmentDateRaw,
+      appointmentDate,
       affiliation: isInstructor ? text(row.affiliation) : '',
       roleType: isInstructor ? text(row.roleType) : '',
       dutyType: isInstructor ? normalizeDutyType(row.dutyType) : '',
@@ -897,18 +941,148 @@
       vacationExcluded: isInstructor ? parseVacationExcluded(vacationRaw) : null,
       workTime: isInstructor ? text(row.workTime) : '',
       appointmentBasis: isInstructor ? text(row.appointmentBasis) : '',
-      appointmentText: isInstructor ? text(row.appointmentText) : '',
+      appointmentText,
       ledgerNote: isInstructor ? text(row.ledgerNote) : '',
       issues: []
     };
   }
 
+  function findTerminationEventText(values) {
+    for (const value of values) {
+      const candidate = text(value);
+      if (!candidate || /^#/.test(candidate)) continue;
+      const normalized = candidate.replace(/\s+/g, '');
+      const keyword = TERMINATION_EVENT_KEYWORDS.find(item => normalized.includes(item.replace(/\s+/g, '')));
+      if (keyword) return candidate;
+    }
+    return '';
+  }
+
+  function refreshFollowUpCandidates() {
+    state.records.forEach(record => {
+      if (record.recordKind === 'followup' && record.followUpStatus === 'pending') record.followUpCandidateId = '';
+    });
+
+    const pendingEvents = state.records.filter(record => record.recordKind === 'followup' && record.followUpStatus === 'pending' && record.followUpDate && record.name);
+    pendingEvents.forEach(eventRecord => {
+      const candidates = state.records.filter(record => {
+        if (record.recordKind !== 'career' || record.id === eventRecord.id || record.name !== eventRecord.name) return false;
+        if (eventRecord.birth && record.birth && eventRecord.birth !== record.birth) return false;
+        if (!record.startDate || !record.endDate) return false;
+        return eventRecord.followUpDate >= record.startDate && eventRecord.followUpDate <= record.endDate;
+      }).sort((a, b) => {
+        const spanA = dateValue(a.endDate) - dateValue(a.startDate);
+        const spanB = dateValue(b.endDate) - dateValue(b.startDate);
+        if (spanA !== spanB) return spanA - spanB;
+        return dateValue(b.startDate) - dateValue(a.startDate);
+      });
+
+      if (candidates.length === 1) {
+        eventRecord.followUpCandidateId = candidates[0].id;
+        return;
+      }
+
+      if (candidates.length > 1) {
+        const exactIdentity = candidates.filter(record =>
+          (eventRecord.rrn && record.rrn && eventRecord.rrn === record.rrn)
+          || (eventRecord.birth && record.birth && eventRecord.birth === record.birth)
+        );
+        if (exactIdentity.length === 1) eventRecord.followUpCandidateId = exactIdentity[0].id;
+      }
+    });
+  }
+
+  function applyFollowUpEvent(eventId) {
+    const eventRecord = state.records.find(record => record.id === eventId);
+    const target = eventRecord ? state.records.find(record => record.id === eventRecord.followUpCandidateId) : null;
+    if (!eventRecord || !target || !eventRecord.followUpDate || !eventRecord.followUpText) return toast('연결할 경력을 확인해 주세요.', true);
+
+    if (!target.originalEndDate) {
+      target.originalEndDate = target.endDate ? new Date(target.endDate) : null;
+      target.originalEndRaw = target.endRaw;
+      target.originalRetirement = target.retirement;
+    }
+    target.endDate = new Date(eventRecord.followUpDate);
+    target.endRaw = dateToInput(eventRecord.followUpDate);
+    target.retirement = eventRecord.followUpText;
+    target.followUpApplied = {
+      eventId: eventRecord.id,
+      sourceIndex: eventRecord.sourceIndex,
+      date: dateToInput(eventRecord.followUpDate),
+      text: eventRecord.followUpText,
+      originalEndDate: target.originalEndDate ? dateToInput(target.originalEndDate) : ''
+    };
+
+    eventRecord.followUpStatus = 'linked';
+    eventRecord.linkedCareerId = target.id;
+    state.selectedRecordIds.delete(eventRecord.id);
+    analyzeRecords();
+    renderAll();
+    toast(`${formatDateNatural(eventRecord.followUpDate)} ${eventRecord.followUpText}을 경력에 반영했습니다.`);
+  }
+
+  function keepFollowUpStandalone(eventId) {
+    const eventRecord = state.records.find(record => record.id === eventId);
+    if (!eventRecord) return;
+    eventRecord.followUpStatus = 'standalone';
+    eventRecord.recordKind = 'career';
+    eventRecord.followUpCandidateId = '';
+    analyzeRecords();
+    renderAll();
+    const index = state.records.indexOf(eventRecord);
+    toast('후속 발령을 별도 행으로 두었습니다. 필요한 정보를 확인해 주세요.');
+    if (index >= 0) window.setTimeout(() => openEditDialog(index, 'edit-end'), 80);
+  }
+
+  function undoAppliedFollowUp(recordId) {
+    const target = state.records.find(record => record.id === recordId);
+    if (!target?.followUpApplied) return;
+    const eventRecord = state.records.find(record => record.id === target.followUpApplied.eventId);
+    if (target.originalEndDate) {
+      target.endDate = new Date(target.originalEndDate);
+      target.endRaw = target.originalEndRaw || dateToInput(target.originalEndDate);
+    }
+    target.retirement = target.originalRetirement || (target.ledgerType === 'teacher' || target.ledgerType === 'instructor' ? '계약기간 만료' : '');
+    target.followUpApplied = null;
+    target.originalEndDate = null;
+    target.originalEndRaw = '';
+    target.originalRetirement = '';
+    if (eventRecord) {
+      eventRecord.followUpStatus = 'pending';
+      eventRecord.linkedCareerId = '';
+    }
+    refreshFollowUpCandidates();
+    analyzeRecords();
+    renderAll();
+    toast('후속 발령 반영을 되돌렸습니다.');
+  }
+
   function analyzeRecords() {
+    refreshFollowUpCandidates();
     state.records.forEach(record => {
       const issues = [];
       const isTeacher = record.ledgerType === 'teacher';
       const isInstructor = record.ledgerType === 'instructor';
       if (!record.name) issues.push(issue('error', '성명이 비어 있습니다.', 'edit-name'));
+
+      if (record.recordKind === 'followup') {
+        if (record.followUpStatus === 'linked') {
+          record.issues = issues;
+          return;
+        }
+        if (record.followUpStatus === 'pending') {
+          if (!record.followUpDate) issues.push(issue('error', '후속 발령일자를 날짜로 읽을 수 없습니다.', 'edit-start'));
+          if (!record.followUpText) issues.push(issue('error', '후속 발령사항을 확인해 주세요.', 'edit-retirement'));
+          if (record.followUpCandidateId) {
+            const target = state.records.find(item => item.id === record.followUpCandidateId);
+            issues.push(issue('warning', `후속 발령 확인: ${formatDateNatural(record.followUpDate)} ${record.followUpText}을 ${target ? formatRecordPeriod(target) : '기존 경력'}에 연결할 수 있습니다.`));
+          } else {
+            issues.push(issue('error', '후속 퇴직·면직 발령으로 보이지만 연결할 기존 경력을 찾지 못했습니다. 별도 행으로 두고 직접 확인해 주세요.', 'edit-end'));
+          }
+          record.issues = issues;
+          return;
+        }
+      }
 
       // 생년월일 미기재는 대장 오류로 막지 않는다.
       // 발급 화면의 신청자 공통정보에서 한 번만 입력할 수 있다.
@@ -939,7 +1113,7 @@
       record.issues = issues;
     });
 
-    const groups = groupRecordsByPerson(state.records.filter(record => record.name));
+    const groups = groupRecordsByPerson(state.records.filter(record => record.name && record.followUpStatus !== 'linked'));
     Object.values(groups).forEach(records => {
       const valid = records.filter(record => record.startDate && record.endDate).sort((a, b) => a.startDate - b.startDate || a.endDate - b.endDate);
       valid.forEach((record, index) => {
@@ -971,16 +1145,32 @@
   }
 
   function buildPeople() {
-    const groups = groupRecordsByPerson(state.records.filter(record => record.name));
-    state.people = Object.entries(groups).map(([key, records]) => ({
-      key,
-      name: records[0].name,
-      birth: records.find(record => record.birth)?.birth || '',
-      rrn: records.find(record => record.rrn)?.rrn || '',
-      records: records.sort((a, b) => dateValue(a.startDate) - dateValue(b.startDate)),
-      errorCount: records.reduce((sum, record) => sum + record.issues.filter(item => item.level === 'error').length, 0),
-      warningCount: records.reduce((sum, record) => sum + record.issues.filter(item => item.level === 'warning').length, 0)
-    })).sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+    const groupedSource = state.records.filter(record => record.name && record.followUpStatus !== 'linked');
+    const groups = groupRecordsByPerson(groupedSource);
+    state.people = Object.entries(groups).map(([key, records]) => {
+      const pendingEvents = records.filter(record => record.recordKind === 'followup' && record.followUpStatus === 'pending');
+      const careerRecords = records.filter(record => record.recordKind !== 'followup');
+      const visibleRecords = [...careerRecords].sort((a, b) => dateValue(a.startDate) - dateValue(b.startDate));
+      const issueRecords = [...careerRecords, ...pendingEvents];
+      return {
+        key,
+        name: records[0].name,
+        birth: records.find(record => record.birth)?.birth || '',
+        rrn: records.find(record => record.rrn)?.rrn || '',
+        records: visibleRecords,
+        pendingEvents: pendingEvents.sort((a, b) => dateValue(a.followUpDate) - dateValue(b.followUpDate)),
+        errorCount: issueRecords.reduce((sum, record) => sum + record.issues.filter(item => item.level === 'error').length, 0),
+        warningCount: issueRecords.reduce((sum, record) => sum + record.issues.filter(item => item.level === 'warning').length, 0)
+      };
+    }).sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+  }
+
+  function getVisibleCareerRecords() {
+    return state.records.filter(record => record.recordKind !== 'followup' && record.followUpStatus !== 'linked');
+  }
+
+  function getPendingFollowUpEvents() {
+    return state.records.filter(record => record.recordKind === 'followup' && record.followUpStatus === 'pending');
   }
 
   function pruneSelections() {
@@ -1014,7 +1204,9 @@
     els.fileState.textContent = '불러옴';
     els.fileState.className = 'state-chip ready';
     els.uploadSummary.hidden = false;
-    els.uploadSummary.innerHTML = `<div class="summary-line"><strong>${escapeHtml(state.fileName)}</strong><span class="type-badge ${badgeClass}">${typeName}</span></div>${state.people.length}명 · 경력 ${state.records.length}건 · 오류 ${errors}건 · 확인 필요 ${warnings}건`;
+    const careerCount = getVisibleCareerRecords().length;
+    const followUpCount = getPendingFollowUpEvents().length;
+    els.uploadSummary.innerHTML = `<div class="summary-line"><strong>${escapeHtml(state.fileName)}</strong><span class="type-badge ${badgeClass}">${typeName}</span></div>${state.people.length}명 · 경력 ${careerCount}건${followUpCount ? ` · 후속발령 ${followUpCount}건 확인` : ''} · 오류 ${errors}건 · 확인 필요 ${warnings}건`;
   }
 
   function renderCertificateModeOptions() {
@@ -1073,7 +1265,7 @@
     els.personList.innerHTML = people.length ? people.map(person => `
       <button class="person-card ${person.key === state.selectedPersonKey ? 'is-active' : ''}" data-person-key="${escapeAttr(person.key)}" type="button">
         <span class="person-main"><strong>${escapeHtml(person.name)}</strong><small>${person.birth ? formatDate(parseDateStrict(person.birth)) : '생년월일 직접 입력'}</small></span>
-        <span class="person-meta">경력 ${person.records.length}건<br>${person.errorCount ? `<span class="has-error">오류 ${person.errorCount}</span>` : person.warningCount ? `확인 ${person.warningCount}` : !person.birth ? '<span class="needs-input">입력 필요</span>' : '정상'}</span>
+        <span class="person-meta">경력 ${person.records.length}건${person.pendingEvents?.length ? `<br><span class="followup-meta">후속발령 ${person.pendingEvents.length}건</span>` : `<br>${person.errorCount ? `<span class="has-error">오류 ${person.errorCount}</span>` : person.warningCount ? `확인 ${person.warningCount}` : !person.birth ? '<span class="needs-input">입력 필요</span>' : '정상'}`}</span>
       </button>`).join('') : '<div class="empty-state small"><p>검색 결과가 없습니다.</p></div>';
     els.personList.querySelectorAll('[data-person-key]').forEach(button => button.addEventListener('click', () => selectPerson(button.dataset.personKey)));
   }
@@ -1117,7 +1309,41 @@
 
     els.careerTitle.textContent = `${person.name}님의 등록 경력 ${person.records.length}건`;
     els.careerList.className = 'career-list';
-    els.careerList.innerHTML = person.records.map(record => {
+
+    const followUpHtml = (person.pendingEvents || []).map(eventRecord => {
+      const target = state.records.find(record => record.id === eventRecord.followUpCandidateId);
+      const dateLabel = eventRecord.followUpDate ? formatDateNatural(eventRecord.followUpDate) : '발령일 확인 필요';
+      if (!target) {
+        return `<div class="followup-card has-error">
+          <div class="followup-card-head">
+            <span class="status-pill error">후속 발령 확인</span>
+            <strong>${escapeHtml(`${dateLabel} · ${eventRecord.followUpText || '발령사항 확인 필요'}`)}</strong>
+          </div>
+          <p>퇴직·면직 발령으로 보이지만 연결할 기존 경력을 찾지 못했습니다.</p>
+          <div class="followup-actions">
+            <button class="btn small ghost" data-standalone-followup="${escapeAttr(eventRecord.id)}" type="button">별도 행으로 두기</button>
+          </div>
+        </div>`;
+      }
+      return `<div class="followup-card">
+        <div class="followup-card-head">
+          <span class="status-pill warning">후속 발령 발견</span>
+          <strong>${escapeHtml(`${dateLabel} · ${eventRecord.followUpText}`)}</strong>
+        </div>
+        <p><strong>${escapeHtml(formatRecordPeriod(target))}</strong> 경력의 실제 종료 발령으로 연결할 수 있습니다.</p>
+        <div class="followup-preview">
+          <span>당초 종료일 <strong>${escapeHtml(formatDateNatural(target.endDate))}</strong></span>
+          <span aria-hidden="true">→</span>
+          <span>반영 후 <strong>${escapeHtml(`${dateLabel} · ${eventRecord.followUpText}`)}</strong></span>
+        </div>
+        <div class="followup-actions">
+          <button class="btn small primary" data-apply-followup="${escapeAttr(eventRecord.id)}" type="button">경력에 반영</button>
+          <button class="btn small ghost" data-standalone-followup="${escapeAttr(eventRecord.id)}" type="button">별도 발령으로 두기</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    const careerHtml = person.records.map(record => {
       const blocked = hasError(record);
       const status = blocked ? ['error', '오류'] : hasWarning(record) ? ['warning', '확인 필요'] : ['clean', '정상'];
       const detail = state.ledgerType === 'teacher'
@@ -1125,11 +1351,19 @@
         : state.ledgerType === 'instructor'
           ? `${record.roleType || '직위 미기재'} · ${record.dutyContent || '담당내용 미기재'}`
           : `${record.position || '직급 미기재'} · ${record.department || '부서 미기재'}`;
-      const subline = state.ledgerType === 'instructor'
-        ? [record.weeklyHours !== null ? `주당 ${formatPlainNumber(record.weeklyHours)}시간` : '', record.totalWeeks !== null ? `총 ${formatPlainNumber(record.totalWeeks)}주` : ''].filter(Boolean).join(' · ')
-        : '';
+      const sublineParts = [];
+      if (state.ledgerType === 'instructor') {
+        if (record.weeklyHours !== null) sublineParts.push(`주당 ${formatPlainNumber(record.weeklyHours)}시간`);
+        if (record.totalWeeks !== null) sublineParts.push(`총 ${formatPlainNumber(record.totalWeeks)}주`);
+      }
+      if (record.followUpApplied?.originalEndDate) {
+        sublineParts.push(`당초 종료 ${formatDate(parseDateStrict(record.followUpApplied.originalEndDate))} → ${formatDate(record.endDate)} ${record.retirement}`);
+      }
+      const subline = sublineParts.join(' · ');
       const vacationBadge = state.ledgerType === 'instructor' && record.vacationExcluded === true
         ? '<span class="status-pill info">방학기간 제외</span>' : '';
+      const followUpBadge = record.followUpApplied
+        ? `<button class="status-pill followup actionable" data-undo-followup="${escapeAttr(record.id)}" type="button" aria-label="후속 발령 반영 되돌리기">후속발령 반영</button>` : '';
       const firstIssue = record.issues.find(item => item.level === 'error') || record.issues[0];
       const statusControl = firstIssue
         ? `<button class="status-pill ${status[0]} actionable" data-open-record-id="${escapeAttr(record.id)}" data-focus-field="${escapeAttr(firstIssue.field || '')}" type="button" aria-label="${escapeAttr(`${formatRecordPeriod(record)} ${status[1]} 수정`)}">${status[1]}</button>`
@@ -1139,19 +1373,24 @@
           <input class="career-check" type="checkbox" data-record-id="${escapeAttr(record.id)}" ${state.selectedRecordIds.has(record.id) ? 'checked' : ''} ${blocked ? 'disabled' : ''} />
           <span class="career-info"><strong>${formatDate(record.startDate)} ~ ${formatDate(record.endDate)}</strong><span class="career-summary">${escapeHtml(detail)}</span>${subline ? `<span class="career-subline">${escapeHtml(subline)}</span>` : ''}</span>
         </label>
-        <span class="career-badges">${statusControl}${vacationBadge}${record.startDate && record.endDate && !blocked ? `<span>${formatDuration(calculateDuration(record.startDate, record.endDate))}</span>` : ''}</span>
+        <span class="career-badges">${statusControl}${followUpBadge}${vacationBadge}${record.startDate && record.endDate && !blocked ? `<span>${formatDuration(calculateDuration(record.startDate, record.endDate))}</span>` : ''}</span>
       </div>`;
     }).join('');
 
+    els.careerList.innerHTML = `${followUpHtml}${careerHtml}`;
+
     els.careerList.querySelectorAll('[data-record-id]').forEach(input => input.addEventListener('change', () => toggleRecord(input.dataset.recordId, input.checked)));
     els.careerList.querySelectorAll('[data-open-record-id]').forEach(button => button.addEventListener('click', () => openRecordIssue(button.dataset.openRecordId, button.dataset.focusField)));
+    els.careerList.querySelectorAll('[data-apply-followup]').forEach(button => button.addEventListener('click', () => applyFollowUpEvent(button.dataset.applyFollowup)));
+    els.careerList.querySelectorAll('[data-standalone-followup]').forEach(button => button.addEventListener('click', () => keepFollowUpStandalone(button.dataset.standaloneFollowup)));
+    els.careerList.querySelectorAll('[data-undo-followup]').forEach(button => button.addEventListener('click', () => undoAppliedFollowUp(button.dataset.undoFollowup)));
     renderCareerAlert(person, selectedRecords);
     renderVacationOptions();
   }
 
   function renderCareerAlert(person, selectedRecords) {
     const birthValue = $('field-birth').value.trim();
-    const applicantNeedsBirth = !parseDateStrict(birthValue);
+    const applicantNeedsBirth = !parseBirthDateInput(birthValue);
     const notices = person.records.flatMap(record => record.issues.map(item => ({ record, item })));
 
     if (state.certificateMode === 'hours') {
@@ -1576,24 +1815,32 @@
       const actualIndex = state.records.indexOf(record);
       const status = hasError(record) ? ['error', '오류'] : hasWarning(record) ? ['warning', '확인 필요'] : ['clean', '정상'];
       const issueHtml = record.issues.length ? record.issues.map(item => `<div class="${item.level === 'error' ? 'error-text' : 'warning-text'}">• ${escapeHtml(item.message)}</div>`).join('') : '점검 결과 이상 없음';
+      const isPendingFollowUp = record.recordKind === 'followup' && record.followUpStatus === 'pending';
+      const periodHtml = isPendingFollowUp
+        ? `<strong>후속 발령</strong><br>${formatDate(record.followUpDate)}`
+        : `${formatDate(record.startDate)}<br>~ ${formatDate(record.endDate)}`;
+      const actionHtml = isPendingFollowUp
+        ? `<button class="edit-row" data-standalone-ledger="${escapeAttr(record.id)}" type="button">별도 행으로 두기</button>`
+        : `<button class="edit-row" data-edit-index="${actualIndex}" type="button">수정</button>`;
       return `<tr>
         <td><span class="status-pill ${status[0]}">${status[1]}</span></td>
         <td><strong>${escapeHtml(record.name || '(미기재)')}</strong></td>
         <td>${record.birth ? escapeHtml(formatDate(parseDateStrict(record.birth))) : '-'}</td>
-        <td>${formatDate(record.startDate)}<br>~ ${formatDate(record.endDate)}</td>
+        <td>${periodHtml}</td>
         <td>${escapeHtml(record.position || '-')}</td>
         <td>${escapeHtml((state.ledgerType === 'teacher' ? record.subject : state.ledgerType === 'instructor' ? formatInstructorDepartment(record) : record.department) || '-')}</td>
-        <td>${escapeHtml(record.retirement || '-')}</td>
+        <td>${escapeHtml(record.retirement || record.followUpText || '-')}</td>
         <td class="issue-text">${issueHtml}</td>
-        <td><button class="edit-row" data-edit-index="${actualIndex}" type="button">수정</button></td>
+        <td>${actionHtml}</td>
       </tr>`;
     }).join('') : '<tr><td colspan="9" class="empty-cell">조건에 맞는 자료가 없습니다.</td></tr>';
     els.ledgerBody.querySelectorAll('[data-edit-index]').forEach(button => button.addEventListener('click', () => openEditDialog(Number(button.dataset.editIndex))));
+    els.ledgerBody.querySelectorAll('[data-standalone-ledger]').forEach(button => button.addEventListener('click', () => keepFollowUpStandalone(button.dataset.standaloneLedger)));
   }
 
   function renderStats() {
     $('stat-people').textContent = state.people.length;
-    $('stat-records').textContent = state.records.length;
+    $('stat-records').textContent = getVisibleCareerRecords().length;
     $('stat-errors').textContent = countIssues('error');
     $('stat-warnings').textContent = countIssues('warning');
   }
@@ -1766,7 +2013,7 @@
 
   function getPreviewIdentifier() {
     if (state.rrnDisplay) return { label: '주민등록번호', value: getEffectiveRrn() };
-    return { label: '생년월일', value: formatDate(parseDateStrict($('field-birth').value)) };
+    return { label: '생년월일', value: formatDate(parseBirthDateInput($('field-birth').value)) };
   }
 
   function resetIssueForm() {
@@ -1790,14 +2037,14 @@
     const selected = getSelectedRecords();
     if (!selected.length) return { ok: false, message: '발급할 경력을 한 건 이상 선택해 주세요.' };
     if (!$('field-name').value.trim()) return { ok: false, message: '성명을 입력해 주세요.' };
-    if (!parseDateStrict($('field-birth').value)) return { ok: false, message: '생년월일을 확인해 주세요.' };
+    if (!parseBirthDateInput($('field-birth').value)) return { ok: false, message: '생년월일을 확인해 주세요.' };
     if (!parseDateStrict($('field-issue-date').value)) return { ok: false, message: '발급일을 확인해 주세요.' };
     if (state.rrnDisplay) {
       const rawRrn = $('field-rrn').value.trim();
       const parsedRrn = parseIdentity(rawRrn);
       if (!rawRrn) return { ok: false, message: '출력할 주민등록번호를 입력해 주세요.' };
       if (parsedRrn.kind !== 'rrn') return { ok: false, message: '주민등록번호 형식을 확인해 주세요.' };
-      const birth = parseDateStrict($('field-birth').value);
+      const birth = parseBirthDateInput($('field-birth').value);
       if (birth && dateToInput(parsedRrn.birth) !== dateToInput(birth)) return { ok: false, message: '주민등록번호 앞 6자리와 생년월일이 일치하지 않습니다.' };
     }
     if (state.certificateMode === 'hours' && selected.some(record => !record.hours)) return { ok: false, message: '선택한 경력 중 소정근로시간이 입력되지 않은 자료가 있습니다.' };
@@ -1941,24 +2188,27 @@
   async function exportLedger() {
     if (!state.records.length) return toast('내려받을 대장이 없습니다.', true);
     try { await ensureXlsx(); } catch (error) { return toast(error.message, true); }
+    const exportRecords = state.records.filter(record => record.followUpStatus !== 'linked');
     let rows;
     let filePrefix;
     let sheetName;
     let widths;
     if (state.ledgerType === 'teacher') {
-      rows = state.records.map(record => ({
+      rows = exportRecords.map(record => ({
         '직위(급)': record.position,
         '과목': record.subject,
         '성명': record.name,
         '생년월일 또는 주민번호': record.rrn || record.birth,
         '임용시작일': record.startDate ? formatDate(record.startDate) : displayRaw(record.startRaw),
-        '임용종료일': record.endDate ? formatDate(record.endDate) : displayRaw(record.endRaw)
+        '임용종료일': record.endDate ? formatDate(record.endDate) : displayRaw(record.endRaw),
+        '퇴직사유': record.retirement,
+        '점검결과': record.issues.map(item => `${item.level === 'error' ? '오류' : '확인'}: ${item.message}`).join(' / ')
       }));
       filePrefix = '기간제교원_경력대장_점검수정';
       sheetName = '기간제교원_대장';
-      widths = [18, 14, 14, 24, 15, 15];
+      widths = [18, 14, 14, 24, 15, 15, 18, 42];
     } else if (state.ledgerType === 'instructor') {
-      rows = state.records.map(record => ({
+      rows = exportRecords.map(record => ({
         '발령일자': record.appointmentDate ? formatDate(record.appointmentDate) : displayRaw(record.appointmentDateRaw),
         '소속': record.affiliation,
         '직위구분': record.roleType,
@@ -1982,7 +2232,7 @@
       sheetName = '시간강사_입력';
       widths = [14, 15, 13, 13, 22, 14, 24, 15, 15, 15, 12, 15, 24, 20, 38, 26, 30, 50];
     } else {
-      rows = state.records.map(record => ({
+      rows = exportRecords.map(record => ({
         '성명': record.name,
         '생년월일': record.birth ? formatDate(parseDateStrict(record.birth)) : '',
         '근무부서': record.department,
@@ -2139,11 +2389,32 @@
     return { kind: birth ? 'birth' : 'invalid', birth, rrn: '' };
   }
 
+  function parseBirthDateInput(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const raw = String(value).trim();
+    const digits = raw.replace(/\D/g, '');
+    if (digits.length === 6 && /^\d{6}$/.test(digits)) {
+      const parsed = parseIdentity(digits);
+      return parsed.birth || null;
+    }
+    return parseDateStrict(raw);
+  }
+
   function formatBirthInput(value) {
-    const digits = String(value ?? '').replace(/\D/g, '').slice(0, 8);
-    if (digits.length <= 4) return digits;
-    if (digits.length <= 6) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
-    return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+    const raw = String(value ?? '').trim();
+    if (!raw) return '';
+    const digits = raw.replace(/\D/g, '').slice(0, 8);
+
+    // 19xx/20xx로 시작하면 8자리 생년월일(YYYYMMDD) 입력으로 처리한다.
+    if (/^(19|20)/.test(digits)) {
+      if (digits.length <= 4) return digits;
+      if (digits.length <= 6) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+      return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+    }
+
+    // YYMMDD는 입력 중 숫자를 그대로 두고, 포커스를 벗어날 때 YYYY-MM-DD로 변환한다.
+    if (digits.length <= 6) return digits;
+    return digits;
   }
 
   function formatRrnInput(value) {

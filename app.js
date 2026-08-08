@@ -88,7 +88,6 @@
 
   const $ = id => document.getElementById(id);
   const qsa = selector => [...document.querySelectorAll(selector)];
-  let xlsxPromise = null;
   let previewResizeObserver = null;
   let previewFitFrame = 0;
   let previewFitScale = 1;
@@ -133,6 +132,7 @@
     bindSettings();
     bindLedger();
     bindEditDialog();
+    bindHelpDialog();
     bindPreviewFit();
     setToday();
     applySettingsToInputs();
@@ -142,19 +142,7 @@
 
   function ensureXlsx() {
     if (window.XLSX) return Promise.resolve(window.XLSX);
-    if (xlsxPromise) return xlsxPromise;
-    xlsxPromise = new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
-      script.async = true;
-      script.onload = () => window.XLSX ? resolve(window.XLSX) : reject(new Error('엑셀 읽기 기능을 확인할 수 없습니다.'));
-      script.onerror = () => reject(new Error('엑셀 읽기 기능을 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.'));
-      document.head.appendChild(script);
-      window.setTimeout(() => {
-        if (!window.XLSX) reject(new Error('엑셀 읽기 기능 연결 시간이 초과되었습니다.'));
-      }, 15000);
-    });
-    return xlsxPromise;
+    return Promise.reject(new Error('엑셀 읽기 기능을 불러오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.'));
   }
 
   function bindTabs() {
@@ -164,6 +152,30 @@
       $(`tab-${button.dataset.tab}`).classList.add('is-active');
       if (button.dataset.tab === 'issue') schedulePreviewFit();
     }));
+  }
+
+  function bindHelpDialog() {
+    const dialog = $('help-dialog');
+    const openButton = $('open-help');
+    if (!dialog || !openButton) return;
+
+    const open = () => {
+      document.body.classList.add('dialog-open');
+      if (typeof dialog.showModal === 'function') dialog.showModal();
+      else dialog.setAttribute('open', '');
+    };
+    const close = () => {
+      if (typeof dialog.close === 'function' && dialog.open) dialog.close();
+      else dialog.removeAttribute('open');
+      document.body.classList.remove('dialog-open');
+      openButton.focus({ preventScroll: true });
+    };
+
+    openButton.addEventListener('click', open);
+    qsa('[data-close-help]').forEach(button => button.addEventListener('click', close));
+    dialog.addEventListener('cancel', event => { event.preventDefault(); close(); });
+    dialog.addEventListener('click', event => { if (event.target === dialog) close(); });
+    dialog.addEventListener('close', () => document.body.classList.remove('dialog-open'));
   }
 
   function bindPreviewFit() {
@@ -1769,6 +1781,18 @@
     return { label: '생년월일', value: formatDate(parseDateStrict($('field-birth').value)) };
   }
 
+  function clearCurrentIssueAfterPrint() {
+    state.rrnDisplay = false;
+    clearRrnInput();
+    state.vacationOptions.clear();
+    state.selectedPersonKey = null;
+    state.selectedRecordIds.clear();
+    if (els.personSearch) els.personSearch.value = '';
+    clearIssueFields(true);
+    renderAll();
+    toast('인쇄 후 개인정보를 초기화했습니다. 대장은 계속 사용할 수 있습니다.');
+  }
+
   function resetIssueForm() {
     $('field-address').value = '';
     $('field-purpose').value = state.settings.purpose;
@@ -1832,13 +1856,28 @@
     </style></head><body>${pages.outerHTML}</body></html>`);
     printDocument.close();
 
+    let privacyCleared = false;
+    const clearPrivacyOnce = () => {
+      if (privacyCleared) return;
+      privacyCleared = true;
+      clearCurrentIssueAfterPrint();
+    };
     const cleanUp = () => window.setTimeout(() => printFrame.remove(), 300);
     printFrame.onload = () => window.setTimeout(() => {
       const printWindow = printFrame.contentWindow;
-      if (!printWindow) return cleanUp();
-      printWindow.addEventListener('afterprint', cleanUp, { once: true });
+      if (!printWindow) {
+        cleanUp();
+        return;
+      }
+      printWindow.addEventListener('afterprint', () => {
+        clearPrivacyOnce();
+        cleanUp();
+      }, { once: true });
       printWindow.focus();
       printWindow.print();
+      // 대부분의 브라우저에서 print()는 인쇄 대화상자가 닫힌 뒤 반환됩니다.
+      // 반환 시점에 부모 화면의 개인정보를 정리하되, 인쇄용 iframe은 별도로 유지합니다.
+      clearPrivacyOnce();
       window.setTimeout(cleanUp, 3000);
     }, 300);
   }
@@ -2019,9 +2058,12 @@
     state.selectedPersonKey = null;
     state.selectedRecordIds.clear();
     state.vacationOptions.clear();
+    if (els.personSearch) els.personSearch.value = '';
+    if (els.ledgerSearch) els.ledgerSearch.value = '';
+    if (els.fileInput) els.fileInput.value = '';
     clearIssueFields(true);
     renderAll();
-    toast('불러온 대장을 비웠습니다.');
+    toast('불러온 대장과 현재 발급 개인정보를 비웠습니다.');
   }
 
   function clearIssueFields(clearName) {

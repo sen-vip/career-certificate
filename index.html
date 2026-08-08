@@ -4,11 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#0f172a" />
-  <title>경력증명 자동화 v0.6.0</title>
+  <title>경력증명 자동화 v0.5.2</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2216%22 fill=%22%230f172a%22/><path d=%22M18 15h28a4 4 0 0 1 4 4v34H14V19a4 4 0 0 1 4-4Z%22 fill=%22white%22/><path d=%22M22 25h20M22 33h20M22 41h12%22 stroke=%22%234f46e5%22 stroke-width=%224%22 stroke-linecap=%22round%22/></svg>" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; script-src 'self' https://cdn.sheetjs.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-src 'self'; worker-src 'self' blob:;" />
   <link rel="stylesheet" href="styles.css" />
-  <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script defer src="app.js"></script>
 </head>
 <body>
@@ -22,9 +21,8 @@
         </div>
       </div>
       <div class="header-actions">
-        <button id="open-help" class="btn ghost header-help-button" type="button" aria-haspopup="dialog" aria-controls="help-dialog">발급 도움말</button>
-        <span class="privacy-badge"><span class="dot"></span>개인정보 브라우저 처리</span>
-        <span class="version-badge">v0.6.0</span>
+        <span class="privacy-badge"><span class="dot"></span>외부 전송 없이 처리</span>
+        <span class="version-badge">v0.5.2</span>
       </div>
     </header>
 
@@ -66,11 +64,7 @@
                     <a href="templates/시간강사_발령대장(양식).xlsx" download>시간강사·전문강사 발령대장</a>
                   </div>
                 </details>
-                <button id="clear-data" class="btn ghost" type="button">대장 비우기</button>
-              </div>
-              <div class="privacy-note" role="note">
-                <span aria-hidden="true">🔒</span>
-                <p><strong>개인정보 보호</strong> 업로드한 발령대장과 증명서 개인정보는 앱의 저장공간에 보관하지 않습니다. 현재 브라우저에서만 처리하며, 업무가 끝나면 <b>대장 비우기</b>로 정리하세요.</p>
+                <button id="clear-data" class="btn ghost" type="button">자료 비우기</button>
               </div>
               <div id="upload-summary" class="upload-summary" hidden></div>
             </section>
@@ -153,9 +147,9 @@
               </div>
 
               <div class="form-grid two">
-                <label>성명<input id="field-name" type="text" placeholder="성명" autocomplete="off" /></label>
+                <label>성명<input id="field-name" type="text" placeholder="성명" /></label>
                 <label><span id="birth-field-label">생년월일</span><input id="field-birth" type="text" inputmode="numeric" maxlength="10" placeholder="YYYY-MM-DD" autocomplete="off" /></label>
-                <label class="span-2">주소<input id="field-address" type="text" placeholder="주소를 입력해주세요" autocomplete="off" /></label>
+                <label class="span-2">주소<input id="field-address" type="text" placeholder="주소를 입력해주세요" /></label>
                 <label>용도<input id="field-purpose" type="text" value="제출용" /></label>
                 <label>발급일<input id="field-issue-date" type="date" /></label>
                 <label class="span-2">퇴직사유<input id="field-retirement" type="text" placeholder="선택 경력 기준 자동 입력" /></label>
@@ -223,7 +217,7 @@
 
         <section class="panel ledger-panel">
           <div class="ledger-toolbar">
-            <label class="search-box wide"><span>⌕</span><input id="ledger-search" type="search" placeholder="성명, 직급, 부서·과목·프로그램, 오류 내용 검색" autocomplete="off" /></label>
+            <label class="search-box wide"><span>⌕</span><input id="ledger-search" type="search" placeholder="성명, 직급, 부서·과목·프로그램, 오류 내용 검색" /></label>
             <select id="issue-filter" aria-label="점검 결과 필터">
               <option value="all">전체 보기</option>
               <option value="error">오류만</option>
@@ -265,7 +259,7 @@
             </div>
             <div class="setting-note safe-note">
               <strong>개인정보 처리 안내</strong>
-              <p>학교명, 담당부서 등 기본정보만 이 기기에 저장됩니다.<br />업로드한 경력대장과 성명·생년월일·주민등록번호·주소 등 증명서 개인정보는 브라우저 저장공간에 보관하지 않습니다.</p>
+              <p>학교명, 담당부서 등 기본정보만 이 기기에 저장됩니다.<br />업로드한 경력대장과 증명서 내용은 저장하지 않습니다.</p>
             </div>
             <div class="button-row right">
               <button id="reset-settings" class="btn ghost" type="button">설정 초기화</button>
@@ -277,62 +271,8 @@
     </main>
   </div>
 
-  <dialog id="help-dialog" class="help-dialog" aria-labelledby="help-title">
-    <div class="help-dialog-shell">
-      <div class="dialog-heading">
-        <div><span class="eyebrow">발급 가이드</span><h2 id="help-title">경력증명 발급 도움말</h2></div>
-        <button class="icon-button" type="button" data-close-help aria-label="도움말 닫기">×</button>
-      </div>
-      <div class="dialog-body help-dialog-body">
-        <section class="help-section help-start">
-          <div class="help-section-heading"><span class="help-number">01</span><div><strong>처음 발급하기</strong><p>대장 업로드부터 인쇄까지 순서대로 확인하세요.</p></div></div>
-          <ol class="help-steps">
-            <li><b>대장 업로드</b><span>기간제교원·시간강사·교육공무직/일용직 중 해당 대장을 불러옵니다.</span></li>
-            <li><b>대상자 선택</b><span>성명 또는 생년월일로 검색해 발급할 사람을 선택합니다.</span></li>
-            <li><b>경력 선택</b><span>발급할 경력의 기간·직위·과목 또는 근무부서를 확인합니다.</span></li>
-            <li><b>발급 정보 확인</b><span>생년월일/주민등록번호 표시 여부, 주소, 용도 등을 확인합니다.</span></li>
-            <li><b>미리보기 후 인쇄</b><span>내용을 대장과 대조한 뒤 인쇄 또는 PDF 저장을 실행합니다.</span></li>
-            <li><b>업무 종료</b><span>여러 명 발급이 끝나면 <strong>대장 비우기</strong>를 눌러 메모리의 대장 데이터를 정리합니다.</span></li>
-          </ol>
-        </section>
-
-        <div class="help-card-grid">
-          <section class="help-card">
-            <span class="help-card-label">기간제교원</span>
-            <h3>임용기간과 과목을 먼저 확인</h3>
-            <ul><li>발령대장의 임용 시작일·종료일을 기준으로 경력이 구성됩니다.</li><li>직위와 과목이 실제 발령내용과 맞는지 확인합니다.</li><li>퇴직사유 등 자동 입력값은 원본 자료와 한 번 더 대조합니다.</li></ul>
-          </section>
-          <section class="help-card">
-            <span class="help-card-label">시간강사·전문강사</span>
-            <h3>방학기간 처리 여부를 확인</h3>
-            <ul><li>실제 경력에 포함할 근무기간을 확인합니다.</li><li>방학기간을 표시하거나 제외해야 하면 여름·겨울·학년말/봄방학 등 여러 기간을 입력할 수 있습니다.</li><li>최종 발급 전 발령대장과 실제 근무기록을 기준으로 확인합니다.</li></ul>
-          </section>
-          <section class="help-card">
-            <span class="help-card-label">교육공무직·일용직</span>
-            <h3>직종과 근무기간을 대조</h3>
-            <ul><li>직급(위), 근무부서, 시작일·종료일을 확인합니다.</li><li>소정근로시간을 표시하는 증명서는 해당 정보가 있는지 확인합니다.</li><li>자동 생성된 경력은 원본 대장과 대조한 뒤 발급합니다.</li></ul>
-          </section>
-          <section class="help-card">
-            <span class="help-card-label">대장에 대상자가 없을 때</span>
-            <h3>원본 자료를 확인해 대장을 보완</h3>
-            <p>현재 버전은 업로드한 대장에 있는 대상자를 기준으로 발급합니다. 대상자가 없다면 원본 발령자료 또는 인사기록을 확인해 대장을 보완한 뒤 다시 업로드하세요.</p>
-          </section>
-        </div>
-
-        <section class="help-security">
-          <div class="help-security-icon" aria-hidden="true">🔒</div>
-          <div><strong>개인정보 보호</strong><p>대장과 증명서 개인정보는 앱의 localStorage·sessionStorage·IndexedDB에 저장하지 않습니다. 인쇄가 끝나면 현재 발급 대상과 주민등록번호·주소·방학기간 입력값을 자동으로 정리하고, 대장은 연속 발급을 위해 메모리에 유지합니다. 업무가 모두 끝나면 <b>대장 비우기</b>를 눌러주세요.</p></div>
-        </section>
-        <p class="help-caution">※ 이 도구는 발급 업무를 보조합니다. 최종 경력 인정 및 기재 내용은 원본 발령자료와 기관의 적용 기준을 확인해 판단하세요.</p>
-      </div>
-      <div class="dialog-actions">
-        <button class="btn primary" type="button" data-close-help>확인</button>
-      </div>
-    </div>
-  </dialog>
-
   <dialog id="edit-dialog" class="edit-dialog">
-    <form method="dialog" id="edit-form" autocomplete="off">
+    <form method="dialog" id="edit-form">
       <div class="dialog-heading">
         <div><span class="eyebrow">대장 바로 수정</span><h2 id="edit-title">경력 자료 수정</h2></div>
         <button class="icon-button" type="button" data-close-edit-dialog aria-label="닫기">×</button>
@@ -340,7 +280,7 @@
       <div class="dialog-body">
         <input id="edit-index" type="hidden" />
         <div class="form-grid edit-form-grid">
-          <label>성명<input id="edit-name" type="text" autocomplete="off" required /></label>
+          <label>성명<input id="edit-name" type="text" required /></label>
           <label><span id="edit-id-label">생년월일</span><input id="edit-id-value" type="text" autocomplete="off" /></label>
           <label id="edit-position-group">직급(위)<input id="edit-position" type="text" /></label>
           <label id="edit-department-group">근무부서<input id="edit-department" type="text" /></label>

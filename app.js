@@ -8,8 +8,8 @@
     position: ['직급(위)', '직위(급)', '직위(직급)', '직종·직위', '직종직위', '직급', '직위', '직종'],
     subject: ['과목', '담당과목', '표시과목'],
     payType: ['급제', '급여형태', '계약형태', '고용형태'],
-    start: ['시작일', '근무시작일', '근무 시작일', '임용일'],
-    end: ['종료일', '근무종료일', '근무 종료일', '퇴직일'],
+    start: ['시작일', '근무시작일', '근무 시작일', '임용일', '임용시작일', '임용 시작일', '계약시작일', '계약 시작일'],
+    end: ['종료일', '근무종료일', '근무 종료일', '퇴직일', '임용종료일', '임용 종료일', '계약종료일', '계약 종료일'],
     teacherStart: ['임용시작일', '임용 시작일', '계약시작일', '계약 시작일', '근무시작일', '근무 시작일'],
     teacherEnd: ['임용종료일', '임용 종료일', '계약종료일', '계약 종료일', '근무종료일', '근무 종료일'],
     period: ['기간', '근무기간'],
@@ -86,6 +86,7 @@
     certificateMode: 'general',
     rrnDisplay: false,
     vacationOptions: new Map(),
+    warningAcknowledged: false,
     settings: loadSettings()
   };
 
@@ -135,6 +136,7 @@
     bindCareerControls();
     bindVacationControls();
     bindSettings();
+    bindHelp();
     bindLedger();
     bindEditDialog();
     bindPreviewFit();
@@ -274,6 +276,15 @@
     if (zoomOut) zoomOut.disabled = previewScale <= PREVIEW_MIN_SCALE + 0.001;
   }
 
+  function bindHelp() {
+    const dialog = $('help-dialog');
+    $('open-help')?.addEventListener('click', () => dialog?.showModal());
+    qsa('[data-close-help]').forEach(button => button.addEventListener('click', () => dialog?.close()));
+    dialog?.addEventListener('click', event => {
+      if (event.target === dialog) dialog.close();
+    });
+  }
+
   function bindUpload() {
     els.dropzone.addEventListener('click', () => els.fileInput.click());
     $('ledger-upload').addEventListener('click', () => els.fileInput.click());
@@ -297,8 +308,8 @@
     });
 
     $('load-demo-general').addEventListener('click', () => {
-      loadRows(GENERAL_DEMO_ROWS, '임의자료_일반경력대장.xlsx', 'general');
-      toast('일반 경력대장 임의 자료를 불러왔습니다.');
+      loadRows(GENERAL_DEMO_ROWS, '임의자료_교육공무직_일용직대장.xlsx', 'general');
+      toast('교육공무직·일용직 임의 자료를 불러왔습니다.');
     });
     $('load-demo-teacher').addEventListener('click', () => {
       loadRows(TEACHER_DEMO_ROWS, '임의자료_기간제교원대장.xlsx', 'teacher');
@@ -487,6 +498,7 @@
       const mode = button.dataset.certificateMode;
       if (['teacher', 'instructor'].includes(state.ledgerType) && mode !== state.ledgerType) return;
       state.certificateMode = mode;
+      state.warningAcknowledged = false;
       renderCertificateModeOptions();
       renderCareers();
       renderPreview();
@@ -505,13 +517,15 @@
       const person = getSelectedPerson();
       if (!person) return;
       state.selectedRecordIds.clear();
-      person.records.filter(record => !hasError(record)).forEach(record => state.selectedRecordIds.add(record.id));
+      state.warningAcknowledged = false;
+      person.records.filter(record => !hasError(record) && !hasWarning(record)).forEach(record => state.selectedRecordIds.add(record.id));
       updateRetirementFromSelection();
       renderCareers();
       renderPreview();
     });
     $('clear-careers').addEventListener('click', () => {
       state.selectedRecordIds.clear();
+      state.warningAcknowledged = false;
       updateRetirementFromSelection();
       renderCareers();
       renderPreview();
@@ -858,12 +872,29 @@
       const detected = detectWorkbookLayout(workbook);
       if (!detected) throw new Error('지원하는 대장 형식을 확인할 수 없습니다. 엑셀의 열 제목을 확인해 주세요.');
       const mapper = detected.type === 'teacher' ? mapTeacherRow : detected.type === 'instructor' ? mapInstructorRow : mapGeneralRow;
-      const rows = detected.rows.map(mapper);
+      const rows = detected.rows.map(row => ({ ...mapper(row), __sourceRow: row.__sourceRow }));
+      clearUploadError();
       loadRows(rows, file.name, detected.type);
       toast(`${ledgerTypeLabel(detected.type)}으로 인식했습니다.`);
     } catch (error) {
-      toast(error?.message || '엑셀을 읽지 못했습니다.', true);
+      const message = error?.message || '엑셀을 읽지 못했습니다.';
+      showUploadError(message);
+      toast(message, true);
     }
+  }
+
+  function showUploadError(message) {
+    const box = $('upload-error');
+    if (!box) return;
+    box.hidden = false;
+    box.innerHTML = `<strong>대장을 불러오지 못했습니다.</strong><span>${escapeHtml(message)}</span><small>열 제목을 확인하거나 ‘기본양식 받기’의 양식을 사용해 주세요.</small>`;
+  }
+
+  function clearUploadError() {
+    const box = $('upload-error');
+    if (!box) return;
+    box.hidden = true;
+    box.innerHTML = '';
   }
 
   function detectWorkbookLayout(workbook) {
@@ -883,8 +914,12 @@
         const threshold = candidate.type === 'instructor' ? 12 : candidate.type === 'teacher' ? 10 : 7;
         if (score < threshold || (best && score <= best.score)) continue;
         const rows = matrix.slice(rowIndex + 1)
-          .filter(row => row.some(value => text(value) !== ''))
-          .map(row => Object.fromEntries(headers.map((header, index) => [header || `열${index + 1}`, row[index] ?? ''])));
+          .map((row, dataIndex) => ({ row, sourceRow: rowIndex + dataIndex + 2 }))
+          .filter(item => item.row.some(value => text(value) !== ''))
+          .map(item => ({
+            ...Object.fromEntries(headers.map((header, index) => [header || `열${index + 1}`, item.row[index] ?? ''])),
+            __sourceRow: item.sourceRow
+          }));
         best = { type: candidate.type, score, sheetName, headerRow: rowIndex, rows };
       }
     });
@@ -901,8 +936,11 @@
       return (has('position') ? 2 : 0) + (has('name') ? 2 : 0) + (has('identity') ? 2 : 0) +
         (has('teacherStart') ? 2 : 0) + (has('teacherEnd') ? 2 : 0) + (has('subject') ? 1 : 0);
     }
+    // 교육공무직·일용직 대장은 기간제 대장과 날짜/성명 열이 겹칠 수 있으므로
+    // 근무부서·고용형태·소정근로시간 같은 고유 열에 높은 가중치를 둔다.
     return (has('name') ? 2 : 0) + (has('identity') ? 1 : 0) + (has('start') ? 2 : 0) +
-      (has('end') ? 2 : 0) + (has('position') ? 1 : 0) + (has('department') ? 1 : 0);
+      (has('end') ? 2 : 0) + (has('position') ? 1 : 0) + (has('department') ? 4 : 0) +
+      (has('payType') ? 4 : 0) + (has('hours') ? 4 : 0);
   }
 
   function mapGeneralRow(row) {
@@ -981,6 +1019,13 @@
     });
   }
 
+  function isUnusedPreparationRow(row) {
+    if (!row) return true;
+    const hasPerson = Boolean(text(row.name) || text(row.identity) || text(row.birth));
+    const hasTimeline = Boolean(text(row.start) || text(row.startRaw) || text(row.end) || text(row.endRaw) || text(row.appointmentDate) || text(row.appointmentText) || text(row.retirement));
+    return !hasPerson && !hasTimeline;
+  }
+
   function loadRows(rows, fileName, ledgerType) {
     state.fileName = fileName;
     state.ledgerType = ledgerType;
@@ -990,11 +1035,13 @@
     state.selectedPersonKey = null;
     state.selectedRecordIds.clear();
     state.vacationOptions.clear();
+    state.warningAcknowledged = false;
     resetHistoryFields();
     state.records = rows
-      .filter(row => !isTemplateExampleRow(row))
+      .filter(row => !isTemplateExampleRow(row) && !isUnusedPreparationRow(row))
       .map((row, index) => normalizeRecord(row, index, ledgerType))
       .filter(record => record.name || record.identityRaw || record.startRaw || record.endRaw || record.position || record.dutyContent || record.appointmentText);
+    if (ledgerType === 'general' && state.records.some(record => record.hours)) state.certificateMode = 'hours';
     refreshFollowUpCandidates();
     analyzeRecords();
     clearIssueFields(true);
@@ -1026,7 +1073,7 @@
 
     return {
       id: `record-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
-      sourceIndex: index + 2,
+      sourceIndex: Number(row.__sourceRow) || index + 2,
       ledgerType,
       recordKind: isFollowUpEvent ? 'followup' : 'career',
       followUpStatus: isFollowUpEvent ? 'pending' : '',
@@ -1261,7 +1308,9 @@
 
   function analyzeRecords() {
     refreshFollowUpCandidates();
+    state.warningAcknowledged = false;
     state.records.forEach(record => {
+      record.duplicateOfId = '';
       const issues = [];
       const isTeacher = record.ledgerType === 'teacher';
       const isInstructor = record.ledgerType === 'instructor';
@@ -1322,17 +1371,27 @@
 
     const groups = groupRecordsByPerson(state.records.filter(record => record.name && record.followUpStatus !== 'linked'));
     Object.values(groups).forEach(records => {
-      const valid = records.filter(record => record.startDate && record.endDate).sort((a, b) => a.startDate - b.startDate || a.endDate - b.endDate);
-      valid.forEach((record, index) => {
-        const previous = valid[index - 1];
-        if (previous && record.startDate <= previous.endDate) record.issues.push(issue('warning', '앞 경력과 근무기간이 겹칩니다.', 'edit-start'));
+      const seen = new Map();
+      records.filter(record => record.recordKind !== 'followup').forEach(record => {
+        const key = [record.name, record.birth, dateToInput(record.startDate), dateToInput(record.endDate), record.position, record.department, record.subject, record.dutyType, record.dutyContent, record.weeklyHours].join('|');
+        if (seen.has(key)) {
+          const original = seen.get(key);
+          record.duplicateOfId = original.id;
+          record.issues.push(issue('error', `대장 ${original.sourceIndex}행과 완전히 같은 경력입니다. 중복 자료를 정리해 주세요.`, 'edit-start'));
+        } else {
+          seen.set(key, record);
+        }
       });
 
-      const seen = new Map();
-      records.forEach(record => {
-        const key = [record.name, record.birth, dateToInput(record.startDate), dateToInput(record.endDate), record.position, record.department, record.subject, record.dutyType, record.dutyContent, record.weeklyHours].join('|');
-        if (seen.has(key)) record.issues.push(issue('warning', `대장 ${seen.get(key).sourceIndex}행과 같은 경력으로 보입니다.`, 'edit-start'));
-        else seen.set(key, record);
+      const valid = records
+        .filter(record => record.recordKind !== 'followup' && !record.duplicateOfId && record.startDate && record.endDate)
+        .sort((a, b) => a.startDate - b.startDate || a.endDate - b.endDate);
+      valid.forEach((record, index) => {
+        const previous = valid[index - 1];
+        if (previous && record.startDate <= previous.endDate) {
+          const overlapDays = diffDays(record.startDate, addDays(previous.endDate, 1));
+          record.issues.push(issue('error', `앞 경력과 근무기간이 ${Math.max(1, overlapDays)}일 겹칩니다. 원 대장을 확인해 주세요.`, 'edit-start'));
+        }
       });
 
       const rrns = new Set(records.map(record => record.rrn).filter(Boolean));
@@ -1406,6 +1465,8 @@
     }
     const errors = countIssues('error');
     const warnings = countIssues('warning');
+    const errorRecords = countIssueRecords('error');
+    const warningRecords = countIssueRecords('warning');
     const typeName = ledgerTypeShortLabel(state.ledgerType);
     const badgeClass = state.ledgerType === 'teacher' ? 'teacher' : state.ledgerType === 'instructor' ? 'instructor' : '';
     els.fileState.textContent = '불러옴';
@@ -1413,7 +1474,7 @@
     els.uploadSummary.hidden = false;
     const careerCount = getVisibleCareerRecords().length;
     const followUpCount = getPendingFollowUpEvents().length;
-    els.uploadSummary.innerHTML = `<div class="summary-line"><strong>${escapeHtml(state.fileName)}</strong><span class="type-badge ${badgeClass}">${typeName}</span></div>${state.people.length}명 · 경력 ${careerCount}건${followUpCount ? ` · 후속발령 ${followUpCount}건 확인` : ''} · 오류 ${errors}건 · 확인 필요 ${warnings}건`;
+    els.uploadSummary.innerHTML = `<div class="summary-line"><strong>${escapeHtml(state.fileName)}</strong><span class="type-badge ${badgeClass}">${typeName}</span></div>${state.people.length}명 · 경력 ${careerCount}건${followUpCount ? ` · 후속발령 ${followUpCount}건 확인` : ''} · 오류 경력 ${errorRecords}건 (${errors}항목) · 확인 필요 경력 ${warningRecords}건 (${warnings}항목)`;
   }
 
   function renderCertificateModeOptions() {
@@ -1422,7 +1483,7 @@
       ? [{ value: 'teacher', label: '기간제교원 경력증명서' }]
       : state.ledgerType === 'instructor'
         ? [{ value: 'instructor', label: '시간강사·전문강사 경력증명서' }]
-        : [{ value: 'general', label: '일반 경력증명서' }, { value: 'hours', label: '소정근로시간 포함' }];
+        : [{ value: 'general', label: '교육공무직·일용직 경력증명서' }, { value: 'hours', label: '소정근로시간 포함' }];
     container.innerHTML = options.map(option => `<button class="segment-btn ${state.certificateMode === option.value ? 'is-active' : ''}" data-certificate-mode="${option.value}" type="button">${option.label}</button>`).join('');
   }
 
@@ -1482,11 +1543,12 @@
     state.selectedPersonKey = key;
     if (personChanged) state.vacationOptions.clear();
     state.selectedRecordIds.clear();
+    state.warningAcknowledged = false;
     state.rrnDisplay = false;
     clearRrnInput();
     const person = getSelectedPerson();
     if (person) {
-      person.records.filter(record => !hasError(record)).forEach(record => state.selectedRecordIds.add(record.id));
+      person.records.filter(record => !hasError(record) && !hasWarning(record)).forEach(record => state.selectedRecordIds.add(record.id));
       $('field-name').value = person.name;
       $('field-birth').value = person.birth || '';
       syncRrnInputFromSelectedPerson();
@@ -1514,7 +1576,7 @@
       return;
     }
 
-    els.careerTitle.textContent = `${person.name}님의 등록 경력 ${person.records.length}건`;
+    els.careerTitle.textContent = `${person.name}${person.birth ? `(${formatDate(parseDateStrict(person.birth))})` : ''}님의 등록 경력 ${person.records.length}건`;
     els.careerList.className = 'career-list';
 
     const followUpHtml = (person.pendingEvents || []).map(eventRecord => {
@@ -1656,10 +1718,19 @@
       sections.push(`<div class="alert-section"><strong class="alert-heading">대장 정보 확인</strong>${rows}${more}</div>`);
     }
 
+    const selectedWarnings = selectedRecords.filter(record => hasWarning(record));
+    if (selectedWarnings.length) {
+      sections.push(`<label class="warning-acknowledge"><input id="warning-acknowledge" type="checkbox" ${state.warningAcknowledged ? 'checked' : ''} /><span><strong>확인 필요 항목을 확인했습니다.</strong><small>선택한 확인 필요 경력 ${selectedWarnings.length}건을 이 상태로 발급합니다.</small></span></label>`);
+    }
+
     els.careerAlert.innerHTML = sections.join('');
     els.careerAlert.querySelectorAll('[data-focus-applicant="birth"]').forEach(button => button.addEventListener('click', focusApplicantBirth));
     els.careerAlert.querySelectorAll('[data-focus-followup]').forEach(button => button.addEventListener('click', () => focusFollowUpCard(button.dataset.focusFollowup)));
     els.careerAlert.querySelectorAll('[data-open-record-id]').forEach(button => button.addEventListener('click', () => openRecordIssue(button.dataset.openRecordId, button.dataset.focusField)));
+    $('warning-acknowledge')?.addEventListener('change', event => {
+      state.warningAcknowledged = event.target.checked;
+      renderPreview();
+    });
   }
 
   function focusFollowUpCard(recordId) {
@@ -1697,6 +1768,7 @@
 
   function toggleRecord(id, checked) {
     checked ? state.selectedRecordIds.add(id) : state.selectedRecordIds.delete(id);
+    state.warningAcknowledged = false;
     updateRetirementFromSelection();
     renderCareers();
     renderPreview();
@@ -2084,8 +2156,8 @@
   function renderStats() {
     $('stat-people').textContent = state.people.length;
     $('stat-records').textContent = getVisibleCareerRecords().length;
-    $('stat-errors').textContent = countIssues('error');
-    $('stat-warnings').textContent = countIssues('warning');
+    $('stat-errors').textContent = countIssueRecords('error');
+    $('stat-warnings').textContent = countIssueRecords('warning');
   }
 
   function renderPreview() {
@@ -2102,7 +2174,15 @@
     const pages = [buildMainCertificate(selected, capacity, total, referenceMap)];
     appendixChunks.forEach((records, index) => pages.push(buildAppendixPage(records, index + 1, appendixChunks.length, appendixCapacity, referenceMap)));
     $('certificate-pages').innerHTML = pages.join('');
-    $('print-certificate').disabled = !selected.length;
+    const printStatus = getPrintBlockingStatus();
+    const printButton = $('print-certificate');
+    printButton.disabled = !printStatus.ok;
+    printButton.title = printStatus.ok ? '' : printStatus.message;
+    const blockMessage = $('print-block-message');
+    if (blockMessage) {
+      blockMessage.textContent = printStatus.ok ? '발급 준비가 완료되었습니다.' : printStatus.message;
+      blockMessage.classList.toggle('ready', printStatus.ok);
+    }
     schedulePreviewFit();
   }
 
@@ -2156,7 +2236,7 @@
     const finalPosition = latest ? (
       state.ledgerType === 'teacher' && latest.subject ? `${latest.position}(${latest.subject})`
         : state.ledgerType === 'instructor' ? formatInstructorFinalPosition(latest)
-          : latest.position
+          : state.ledgerType === 'general' ? formatGeneralPosition(latest) : latest.position
     ) : '';
     const history = getHistoryPreviewValues();
     const firstPageRecords = selected.slice(0, capacity);
@@ -2214,7 +2294,7 @@
 
   function buildCareerRow(record, isHours, isTeacher, referenceMap = new Map()) {
     const duration = calculateDuration(record.startDate, record.endDate);
-    const position = state.ledgerType === 'instructor' ? formatInstructorPosition(record) : record.position;
+    const position = state.ledgerType === 'instructor' ? formatInstructorPosition(record) : state.ledgerType === 'general' ? formatGeneralPosition(record) : record.position;
     const reference = referenceMap.get(record.id) || '';
     const positionHtml = `${escapeHtml(position).replace(/\n/g, '<br />')}${reference ? ` <span class="vacation-reference">${reference}</span>` : ''}`;
     const extra = isTeacher ? record.subject : state.ledgerType === 'instructor' ? formatInstructorDepartment(record) : record.department;
@@ -2268,9 +2348,9 @@
     toast('발급 입력값을 초기화했습니다.');
   }
 
-  function validateBeforePrint() {
+  function getPrintBlockingStatus() {
     const selected = getSelectedRecords();
-    if (!selected.length) return { ok: false, message: '발급할 경력을 한 건 이상 선택해 주세요.' };
+    if (!selected.length) return { ok: false, message: '발급할 정상 경력을 한 건 이상 선택해 주세요.' };
     if (!$('field-name').value.trim()) return { ok: false, message: '성명을 입력해 주세요.' };
     if (!parseBirthDateInput($('field-birth').value)) return { ok: false, message: '생년월일을 확인해 주세요.' };
     if (!parseDateStrict($('field-issue-date').value)) return { ok: false, message: '발급일을 확인해 주세요.' };
@@ -2283,6 +2363,7 @@
       if (birth && dateToInput(parsedRrn.birth) !== dateToInput(birth)) return { ok: false, message: '주민등록번호 앞 6자리와 생년월일이 일치하지 않습니다.' };
     }
     if (state.certificateMode === 'hours' && selected.some(record => !record.hours)) return { ok: false, message: '선택한 경력 중 소정근로시간이 입력되지 않은 자료가 있습니다.' };
+
     const historySpecs = {
       award: ['포상', ['date', 'type', 'agency']],
       discipline: ['징계', ['date', 'type', 'agency']],
@@ -2292,17 +2373,29 @@
       const incomplete = state.historyEntries[type].find(entry => fields.some(field => !text(entry[field])));
       if (incomplete) return { ok: false, message: `${label} 사항의 연월일과 내용을 모두 입력해 주세요.` };
     }
+
     const unresolvedFollowUp = getPendingFollowUpEvents().find(eventRecord => eventRecord.followUpCandidateId && state.selectedRecordIds.has(eventRecord.followUpCandidateId));
     if (unresolvedFollowUp) {
       const dateLabel = unresolvedFollowUp.followUpDate ? formatDateNatural(unresolvedFollowUp.followUpDate) : '날짜 미확인';
-      return { ok: false, message: `${dateLabel} 퇴직 발령 가능성을 먼저 확인해 주세요.` };
+      return { ok: false, message: `${dateLabel} 퇴직 발령 가능성을 먼저 확인해 주세요.`, followUpId: unresolvedFollowUp.id };
     }
+
     const vacationError = selected.flatMap(record => validateVacationOption(record)).at(0);
-    if (vacationError) {
-      focusVacationIssue(vacationError);
-      return { ok: false, message: vacationError.message };
+    if (vacationError) return { ok: false, message: vacationError.message, vacationError };
+
+    const selectedWarnings = selected.filter(record => hasWarning(record));
+    if (selectedWarnings.length && !state.warningAcknowledged) {
+      return { ok: false, message: '확인 필요 항목을 확인한 뒤 ‘이 상태로 발급합니다’를 체크해 주세요.', warningAck: true };
     }
-    return { ok: true };
+    return { ok: true, message: '' };
+  }
+
+  function validateBeforePrint() {
+    const status = getPrintBlockingStatus();
+    if (status.vacationError) focusVacationIssue(status.vacationError);
+    if (status.followUpId) focusFollowUpCard(status.followUpId);
+    if (status.warningAck) $('warning-acknowledge')?.focus();
+    return { ok: status.ok, message: status.message };
   }
 
   function printCertificateOnly() {
@@ -2335,6 +2428,7 @@
       printWindow.addEventListener('afterprint', cleanUp, { once: true });
       printWindow.focus();
       printWindow.print();
+      toast('공용 PC에서는 발급 후 ‘자료 비우기’를 눌러 주세요.');
       window.setTimeout(cleanUp, 3000);
     }, 300);
   }
@@ -2346,7 +2440,7 @@
     const instructor = state.ledgerType === 'instructor';
     clearEditFieldErrors();
     $('edit-index').value = index;
-    $('edit-title').textContent = teacher ? '기간제교원 경력 수정' : instructor ? '시간강사·전문강사 경력 수정' : '일반 경력 수정';
+    $('edit-title').textContent = teacher ? '기간제교원 경력 수정' : instructor ? '시간강사·전문강사 경력 수정' : '교육공무직·일용직 경력 수정';
     $('edit-name').value = record.name;
     $('edit-id-label').textContent = teacher || instructor ? '생년월일 또는 주민번호' : '생년월일';
     $('edit-id-value').value = record.rrn || record.birth || record.identityRaw;
@@ -2483,21 +2577,21 @@
     } else {
       rows = exportRecords.map(record => ({
         '성명': record.name,
-        '생년월일': record.birth ? formatDate(parseDateStrict(record.birth)) : '',
+        '생년월일 또는 주민번호': record.rrn || record.birth,
         '근무부서': record.department,
-        '직급(위)': record.position,
-        '급제': record.payType,
-        '시작일': record.startDate ? formatDate(record.startDate) : displayRaw(record.startRaw),
-        '종료일': record.endDate ? formatDate(record.endDate) : displayRaw(record.endRaw),
-        '기간': record.startDate && record.endDate && record.endDate >= record.startDate ? formatDuration(calculateDuration(record.startDate, record.endDate)) : '',
+        '직종·직위': record.position,
+        '고용형태': record.payType,
+        '임용시작일': record.startDate ? formatDate(record.startDate) : displayRaw(record.startRaw),
+        '임용종료일': record.endDate ? formatDate(record.endDate) : displayRaw(record.endRaw),
         '퇴직사유': record.retirement,
-        '비고': record.note,
         '소정근로시간': record.hours,
+        '발령사항': record.appointmentText,
+        '비고': record.note,
         '점검결과': record.issues.map(item => `${item.level === 'error' ? '오류' : '확인'}: ${item.message}`).join(' / ')
       }));
-      filePrefix = '경력대장_점검수정';
-      sheetName = '대장';
-      widths = [12, 14, 14, 22, 13, 14, 14, 15, 16, 38, 16, 50];
+      filePrefix = '공무직_일용직_경력대장_점검수정';
+      sheetName = '발령대장_입력';
+      widths = [12, 24, 14, 22, 16, 14, 14, 18, 18, 34, 38, 50];
     }
     const sheet = XLSX.utils.json_to_sheet(rows);
     sheet['!cols'] = widths.map(wch => ({ wch }));
@@ -2518,6 +2612,8 @@
     state.selectedPersonKey = null;
     state.selectedRecordIds.clear();
     state.vacationOptions.clear();
+    state.warningAcknowledged = false;
+    clearUploadError();
     clearIssueFields(true);
     renderAll();
     toast('불러온 대장을 비웠습니다.');
@@ -2595,6 +2691,7 @@
   function hasWarning(record) { return record.issues.some(item => item.level === 'warning'); }
   function issue(level, message, field = '') { return { level, message, field }; }
   function countIssues(level) { return state.records.reduce((sum, record) => sum + record.issues.filter(item => item.level === level).length, 0); }
+  function countIssueRecords(level) { return state.records.filter(record => record.issues.some(item => item.level === level)).length; }
   function compareLatest(a, b) { return dateValue(a.endDate || a.startDate) - dateValue(b.endDate || b.startDate); }
   function dateValue(date) { return date instanceof Date && !Number.isNaN(date.valueOf()) ? date.valueOf() : 0; }
 
@@ -2751,11 +2848,11 @@
   function text(value) { return value === null || value === undefined ? '' : String(value).trim(); }
 
   function ledgerTypeLabel(type) {
-    return type === 'teacher' ? '기간제교원 경력대장' : type === 'instructor' ? '시간강사·전문강사 경력대장' : '일반 경력대장';
+    return type === 'teacher' ? '기간제교원 경력대장' : type === 'instructor' ? '시간강사·전문강사 경력대장' : '교육공무직·일용직 경력대장';
   }
 
   function ledgerTypeShortLabel(type) {
-    return type === 'teacher' ? '기간제교원 대장' : type === 'instructor' ? '시간강사 경력대장' : '일반 경력대장';
+    return type === 'teacher' ? '기간제교원 대장' : type === 'instructor' ? '시간강사 경력대장' : '교육공무직·일용직 대장';
   }
 
   function parseInstructorNumber(value) {
@@ -2798,6 +2895,15 @@
     if (!normalized || ['아니오', '아니요', 'n', 'no', '미제외'].includes(normalized)) return false;
     if (['예', '네', 'y', 'yes', '제외', '방학기간제외', '방학제외'].includes(normalized) || normalized.includes('방학기간제외')) return true;
     return null;
+  }
+
+  function formatGeneralPosition(record) {
+    const position = text(record?.position);
+    const payType = text(record?.payType);
+    if (!payType) return position;
+    if (!position) return payType;
+    if (normalizeSearch(position).includes(normalizeSearch(payType))) return position;
+    return `${position}(${payType})`;
   }
 
   function formatInstructorPosition(record) {

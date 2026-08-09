@@ -934,7 +934,7 @@
         : ledgerType === 'teacher'
           ? (rawRetirement || (endDate ? '계약기간 만료' : ''))
           : isInstructor ? (endDate ? '계약기간 만료' : '') : rawRetirement,
-      note: isInstructor ? text(row.checkMemo) : text(row.note),
+      note: isInstructor ? filterInstructorCheckMemo(row.checkMemo) : text(row.note),
       hours: ledgerType === 'general' ? text(row.hours) : '',
       appointmentDateRaw,
       appointmentDate,
@@ -955,6 +955,14 @@
       ledgerNote: isInstructor ? text(row.ledgerNote) : '',
       issues: []
     };
+  }
+
+  function filterInstructorCheckMemo(value) {
+    const memo = text(value);
+    if (!memo) return '';
+    const normalized = memo.replace(/\s+/g, '');
+    const optionalChecks = ['담당구분확인', '담당내용확인', '주당수업시간확인', '총주수확인'];
+    return optionalChecks.includes(normalized) ? '' : memo;
   }
 
   function findTerminationEventText(values) {
@@ -1165,13 +1173,13 @@
       if (isInstructor) {
         if (!record.roleType) issues.push(issue('error', '직위구분이 비어 있습니다.', 'edit-instructor-role'));
         else if (!INSTRUCTOR_ROLE_VALUES.includes(record.roleType)) issues.push(issue('error', '직위구분은 시간강사 또는 전문강사로 입력해 주세요.', 'edit-instructor-role'));
-        if (!record.dutyTypeRaw) issues.push(issue('error', '담당구분이 비어 있습니다.', 'edit-instructor-duty-type'));
-        else if (!INSTRUCTOR_DUTY_VALUES.includes(record.dutyType)) issues.push(issue('error', '담당구분은 교과·프로그램·부서 중 하나로 입력해 주세요.', 'edit-instructor-duty-type'));
-        if (!record.dutyContent) issues.push(issue('error', '담당내용이 비어 있습니다.', 'edit-instructor-duty-content'));
-        if (!record.weeklyHoursRaw) issues.push(issue('error', '주당수업시간이 비어 있습니다.', 'edit-instructor-weekly-hours'));
-        else if (record.weeklyHours === null) issues.push(issue('error', '주당수업시간을 숫자로 해석할 수 없습니다.', 'edit-instructor-weekly-hours'));
-        if (record.totalWeeksRaw && record.totalWeeks === null) issues.push(issue('error', '총주수를 숫자로 해석할 수 없습니다.', 'edit-instructor-total-weeks'));
-        if (record.vacationRaw && record.vacationExcluded === null) issues.push(issue('error', '방학기간 제외 값을 예 또는 아니오로 확인해 주세요.', 'edit-instructor-vacation'));
+
+        // 시간강사 보조정보는 증명서 발급을 막지 않는다.
+        // 담당구분은 선택사항이며, 입력되어 있으면 근무부서 표시 형식을 보조하는 용도로만 사용한다.
+        if (!record.dutyContent) issues.push(issue('warning', '담당내용이 비어 있습니다. 필요하면 입력해 주세요.', 'edit-instructor-duty-content'));
+        if (record.weeklyHoursRaw && record.weeklyHours === null) issues.push(issue('warning', '주당수업시간을 숫자로 해석할 수 없습니다. 미기재 상태로도 증명서 발급은 가능합니다.', 'edit-instructor-weekly-hours'));
+        if (record.totalWeeksRaw && record.totalWeeks === null) issues.push(issue('warning', '총주수를 숫자로 해석할 수 없습니다. 미기재 상태로도 증명서 발급은 가능합니다.', 'edit-instructor-total-weeks'));
+        if (record.vacationRaw && record.vacationExcluded === null) issues.push(issue('warning', '방학기간 제외 값을 확인해 주세요. 미확인 상태로도 증명서 발급은 가능합니다.', 'edit-instructor-vacation'));
         if (record.appointmentDateRaw && !record.appointmentDate) issues.push(issue('warning', '발령일자를 날짜로 읽을 수 없습니다.'));
         if (record.note) issues.push(issue('warning', `상세 확인 필요: ${record.note}`, 'edit-note'));
       } else {
@@ -2223,7 +2231,7 @@
     $('edit-pay-type').value = record.payType;
     $('edit-hours').value = record.hours;
     $('edit-instructor-role').value = record.roleType || '시간강사';
-    $('edit-instructor-duty-type').value = INSTRUCTOR_DUTY_VALUES.includes(record.dutyType) ? record.dutyType : '교과';
+    $('edit-instructor-duty-type').value = INSTRUCTOR_DUTY_VALUES.includes(record.dutyType) ? record.dutyType : '';
     $('edit-instructor-duty-content').value = record.dutyContent || '';
     $('edit-instructor-weekly-hours').value = record.weeklyHoursRaw || (record.weeklyHours !== null ? formatPlainNumber(record.weeklyHours) : '');
     $('edit-instructor-total-weeks').value = record.totalWeeksRaw || (record.totalWeeks !== null ? formatPlainNumber(record.totalWeeks) : '');

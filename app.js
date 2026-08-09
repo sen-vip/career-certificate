@@ -411,6 +411,13 @@
     };
   }
 
+  function historyTextClass(value) {
+    const length = text(value).replace(/\s/g, '').length;
+    if (length >= 22) return 'history-text-cell history-text-xlong';
+    if (length >= 13) return 'history-text-cell history-text-long';
+    return 'history-text-cell';
+  }
+
   function buildHistoryTable(history) {
     const awardCount = history.award.length;
     const disciplineCount = history.discipline.length;
@@ -418,15 +425,25 @@
     const pairHtml = Array.from({ length: pairRows }, (_, index) => {
       const award = history.award[index] || (index === 0 && !awardCount ? { date: '', type: '해당없음', agency: '' } : { date: '', type: '', agency: '' });
       const discipline = history.discipline[index] || (index === 0 && !disciplineCount ? { date: '', type: '해당없음', agency: '' } : { date: '', type: '', agency: '' });
-      return `<tr><td>${escapeHtml(award.date)}</td><td>${escapeHtml(award.type)}</td><td>${escapeHtml(award.agency)}</td><td>${escapeHtml(discipline.date)}</td><td colspan="2">${escapeHtml(discipline.type)}</td><td>${escapeHtml(discipline.agency)}</td></tr>`;
+      return `<tr class="history-data-row"><td class="history-date-cell">${escapeHtml(award.date)}</td><td class="${historyTextClass(award.type)}">${escapeHtml(award.type)}</td><td class="${historyTextClass(award.agency)}">${escapeHtml(award.agency)}</td><td class="history-date-cell">${escapeHtml(discipline.date)}</td><td colspan="2" class="${historyTextClass(discipline.type)}">${escapeHtml(discipline.type)}</td><td class="${historyTextClass(discipline.agency)}">${escapeHtml(discipline.agency)}</td></tr>`;
     }).join('');
     const suspensionCount = history.suspension.length;
     const suspensionRows = Math.max(1, suspensionCount);
     const suspensionHtml = Array.from({ length: suspensionRows }, (_, index) => {
       const item = history.suspension[index] || (index === 0 ? { date: '', reason: '해당없음', agency: '' } : { date: '', reason: '', agency: '' });
-      return `<tr><td>${escapeHtml(item.date)}</td><td colspan="5">${escapeHtml(item.reason)}</td><td>${escapeHtml(item.agency)}</td></tr>`;
+      return `<tr class="history-data-row"><td class="history-date-cell">${escapeHtml(item.date)}</td><td colspan="5" class="${historyTextClass(item.reason)}">${escapeHtml(item.reason)}</td><td class="${historyTextClass(item.agency)}">${escapeHtml(item.agency)}</td></tr>`;
     }).join('');
-    return `<table class="certificate-table history-table"><tbody>
+    return `<table class="certificate-table history-table">
+      <colgroup>
+        <col class="history-col-section" />
+        <col class="history-col-date" />
+        <col class="history-col-type" />
+        <col class="history-col-agency" />
+        <col class="history-col-date" />
+        <col class="history-col-type-half" />
+        <col class="history-col-type-half" />
+        <col class="history-col-agency" />
+      </colgroup><tbody>
       <tr><th rowspan="${pairRows + 2}" class="section-label">상벌<br />사항</th><th colspan="3">포 상</th><th colspan="4">징 계</th></tr>
       <tr><th>연월일</th><th>종류</th><th>시행청</th><th>연월일</th><th colspan="2">종류</th><th>시행청</th></tr>
       ${pairHtml}

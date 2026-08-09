@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#0f172a" />
-  <title>경력증명 자동화 v0.7.0</title>
+  <title>경력증명 자동화 v0.7.1</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2216%22 fill=%22%230f172a%22/><path d=%22M18 15h28a4 4 0 0 1 4 4v34H14V19a4 4 0 0 1 4-4Z%22 fill=%22white%22/><path d=%22M22 25h20M22 33h20M22 41h12%22 stroke=%22%234f46e5%22 stroke-width=%224%22 stroke-linecap=%22round%22/></svg>" />
   <link rel="stylesheet" href="styles.css" />
   <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -18,12 +18,13 @@
         <div>
           <div class="brand-title">경력증명 자동화</div>
           <div class="brand-subtitle">대장을 확인하고 증명서를 바로 출력합니다</div>
+          <div class="brand-creator">제작 <strong>senvip(학돌랩)</strong></div>
         </div>
       </div>
       <div class="header-actions">
         <span class="privacy-badge"><span class="dot"></span>외부 전송 없이 처리</span>
         <button id="open-help" class="help-button" type="button">도움말</button>
-        <span class="version-badge">v0.7.0</span>
+        <span class="version-badge">v0.7.1</span>
       </div>
     </header>
 
@@ -283,43 +284,60 @@
     </main>
   </div>
 
-  <footer class="app-footer no-print">
-    <span>제작 · <strong>학돌랩</strong></span>
-    <span>경력자료는 브라우저에서 처리되며 업로드한 대장과 발급내용은 저장하지 않습니다.</span>
-  </footer>
 
   <dialog id="help-dialog" class="help-dialog">
-    <div class="dialog-heading">
-      <div><span class="eyebrow">사용 도움말</span><h2>경력증명 자동화 이용 안내</h2></div>
-      <button class="icon-button" type="button" data-close-help aria-label="도움말 닫기">×</button>
+    <div class="help-shell">
+      <div class="dialog-heading help-heading">
+        <div>
+          <span class="help-kicker">HELP</span>
+          <h2>경력증명 자동화 이용 안내</h2>
+          <p>발급 순서와 꼭 확인해야 할 항목만 빠르게 정리했어요.</p>
+        </div>
+        <button class="icon-button help-close" type="button" data-close-help aria-label="도움말 닫기">×</button>
+      </div>
+
+      <div class="dialog-body help-body">
+        <section class="help-quickstart">
+          <h3>발급은 이렇게</h3>
+          <div class="help-steps" aria-label="기본 발급 순서">
+            <div class="help-step"><span>1</span><strong>대장 업로드</strong><small>경력대장 엑셀 불러오기</small></div>
+            <div class="help-step"><span>2</span><strong>대상자 찾기</strong><small>성명·생년월일로 확인</small></div>
+            <div class="help-step"><span>3</span><strong>경력 확인</strong><small>정상 경력 선택·오류 처리</small></div>
+            <div class="help-step"><span>4</span><strong>발급·인쇄</strong><small>인적사항 확인 후 출력</small></div>
+          </div>
+        </section>
+
+        <div class="help-grid">
+          <section class="help-card">
+            <div class="help-card-title"><span class="help-icon">✓</span><h3>점검 상태</h3></div>
+            <p><strong class="help-status error">오류</strong> 날짜 오류, 중복·겹침, 미해결 후속발령 등입니다. 해결 전에는 인쇄할 수 없습니다.</p>
+            <p><strong class="help-status warning">확인 필요</strong> 주당 수업량처럼 발급 상황에 따라 생략 가능한 항목입니다. 내용을 확인한 뒤 발급할 수 있습니다.</p>
+            <p><strong class="help-status clean">정상</strong> 앱이 확인한 범위에서 발급을 막는 문제가 없는 경력입니다.</p>
+          </section>
+
+          <section class="help-card">
+            <div class="help-card-title"><span class="help-icon">☀</span><h3>시간강사 방학기간</h3></div>
+            <p><strong>표시 안 함 / 방학기간 제외 / 상세 기간 입력</strong> 중 이번 발급에 필요한 방식을 선택할 수 있습니다.</p>
+            <p class="help-note">방학기간은 증명서 문구용입니다. 현재 근무연수 계산에서 방학일수를 자동 차감하지 않습니다.</p>
+          </section>
+
+          <section class="help-card">
+            <div class="help-card-title"><span class="help-icon">↳</span><h3>후속 퇴직발령</h3></div>
+            <p>날짜가 한쪽에만 있는 별도 행은 퇴직·면직 후속발령일 수 있습니다. <strong>이전 경력의 퇴직으로 반영</strong> 또는 <strong>퇴직 발령 아님</strong>을 확인해 주세요.</p>
+          </section>
+
+          <section class="help-card help-card-safe">
+            <div class="help-card-title"><span class="help-icon">⌁</span><h3>개인정보</h3></div>
+            <p>업로드한 경력대장과 발급 내용은 서버에 저장하지 않습니다. 공용 PC에서는 발급 후 <strong>자료 비우기</strong>를 눌러 주세요.</p>
+          </section>
+        </div>
+      </div>
+
+      <div class="dialog-actions help-actions">
+        <span class="help-maker">제작 <strong>senvip(학돌랩)</strong></span>
+        <button class="btn primary" type="button" data-close-help>확인</button>
+      </div>
     </div>
-    <div class="dialog-body help-body">
-      <section>
-        <h3>기본 발급 순서</h3>
-        <ol><li>경력대장 엑셀을 불러옵니다.</li><li>성명 또는 생년월일로 대상자를 찾습니다.</li><li>발급할 경력을 확인하고 선택합니다.</li><li>생년월일·주소·용도·발급일 등을 확인한 뒤 인쇄합니다.</li></ol>
-      </section>
-      <section>
-        <h3>점검 상태</h3>
-        <p><strong class="help-status error">오류</strong> 날짜 오류, 중복·겹침, 미해결 후속발령 등 잘못된 발급 가능성이 있는 항목입니다. 해결 전에는 선택·인쇄할 수 없습니다.</p>
-        <p><strong class="help-status warning">확인 필요</strong> 주당 수업량 등 학교나 요청기관에 따라 생략할 수 있는 항목입니다. 내용을 확인하고 ‘이 상태로 발급’을 체크한 뒤 인쇄할 수 있습니다.</p>
-        <p><strong class="help-status clean">정상</strong> 앱이 확인한 범위에서 발급을 막는 문제가 없는 경력입니다.</p>
-      </section>
-      <section>
-        <h3>시간강사 방학기간</h3>
-        <p>‘표시 안 함 / 방학기간 제외 / 상세 기간 입력’ 중 이번 발급에 사용할 방식을 선택할 수 있습니다. 상세 기간은 경력기간 안의 유효한 날짜를 모두 입력해야 인쇄할 수 있습니다.</p>
-        <p class="help-note">방학기간 표시는 증명서 문구를 위한 기능이며, 현재 근무연수 계산에서 방학일수를 자동으로 빼지 않습니다.</p>
-      </section>
-      <section>
-        <h3>후속 퇴직발령</h3>
-        <p>시작일 또는 종료일 한쪽에 날짜만 있는 별도 행은 퇴직·면직 후속발령일 수 있습니다. ‘이전 경력의 퇴직으로 반영’ 또는 ‘퇴직 발령 아님’을 반드시 확인해 주세요.</p>
-      </section>
-      <section>
-        <h3>개인정보</h3>
-        <p>업로드한 경력대장과 증명서 발급 정보는 서버에 저장하지 않습니다. 공용 PC에서는 발급 후 반드시 <strong>자료 비우기</strong>를 눌러 주세요.</p>
-      </section>
-      <div class="help-maker">제작 · <strong>학돌랩</strong></div>
-    </div>
-    <div class="dialog-actions"><button class="btn primary" type="button" data-close-help>확인</button></div>
   </dialog>
 
   <dialog id="edit-dialog" class="edit-dialog">

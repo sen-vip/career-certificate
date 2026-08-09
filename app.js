@@ -314,8 +314,20 @@
   }
 
   function bindFormFields() {
-    const fields = ['field-name', 'field-birth', 'field-address', 'field-purpose', 'field-issue-date', 'field-retirement', 'field-award', 'field-discipline', 'field-suspension'];
+    const fields = [
+      'field-name', 'field-birth', 'field-address', 'field-purpose', 'field-issue-date', 'field-retirement',
+      'field-award-date', 'field-award-type', 'field-award-agency',
+      'field-discipline-date', 'field-discipline-type', 'field-discipline-agency',
+      'field-suspension-date', 'field-suspension-reason', 'field-suspension-agency'
+    ];
     fields.forEach(id => $(id).addEventListener('input', renderPreview));
+    ['award', 'discipline', 'suspension'].forEach(type => {
+      $(`field-${type}-enabled`).addEventListener('change', () => {
+        updateHistoryFieldVisibility();
+        renderPreview();
+      });
+    });
+    updateHistoryFieldVisibility();
     els.personSearch.addEventListener('input', renderPeople);
     $('reset-form').addEventListener('click', resetIssueForm);
     $('print-certificate').addEventListener('click', () => {
@@ -323,6 +335,51 @@
       if (!check.ok) return toast(check.message, true);
       printCertificateOnly();
     });
+  }
+
+  function updateHistoryFieldVisibility() {
+    ['award', 'discipline', 'suspension'].forEach(type => {
+      const enabled = $(`field-${type}-enabled`).checked;
+      $(`field-${type}-fields`).hidden = !enabled;
+    });
+  }
+
+  function resetHistoryFields() {
+    ['award', 'discipline', 'suspension'].forEach(type => {
+      $(`field-${type}-enabled`).checked = false;
+    });
+    ['field-award-date', 'field-award-type', 'field-award-agency',
+      'field-discipline-date', 'field-discipline-type', 'field-discipline-agency',
+      'field-suspension-date', 'field-suspension-reason', 'field-suspension-agency'
+    ].forEach(id => { $(id).value = ''; });
+    updateHistoryFieldVisibility();
+  }
+
+  function getHistoryPreviewValues() {
+    const awardEnabled = $('field-award-enabled').checked;
+    const disciplineEnabled = $('field-discipline-enabled').checked;
+    const suspensionEnabled = $('field-suspension-enabled').checked;
+    const formatHistoryDate = id => {
+      const parsed = parseDateStrict($(id).value);
+      return parsed ? formatDate(parsed) : '';
+    };
+    return {
+      award: awardEnabled ? {
+        date: formatHistoryDate('field-award-date'),
+        type: $('field-award-type').value.trim(),
+        agency: $('field-award-agency').value.trim()
+      } : { date: '', type: '해당없음', agency: '' },
+      discipline: disciplineEnabled ? {
+        date: formatHistoryDate('field-discipline-date'),
+        type: $('field-discipline-type').value.trim(),
+        agency: $('field-discipline-agency').value.trim()
+      } : { date: '', type: '해당없음', agency: '' },
+      suspension: suspensionEnabled ? {
+        date: formatHistoryDate('field-suspension-date'),
+        reason: $('field-suspension-reason').value.trim(),
+        agency: $('field-suspension-agency').value.trim()
+      } : { date: '', reason: '해당없음', agency: '' }
+    };
   }
 
   function bindBirthInput() {
@@ -2028,6 +2085,7 @@
         : state.ledgerType === 'instructor' ? formatInstructorFinalPosition(latest)
           : latest.position
     ) : '';
+    const history = getHistoryPreviewValues();
     const firstPageRecords = selected.slice(0, capacity);
     return `<article class="certificate" aria-label="경력증명서">
       <h1>경 력 증 명 서</h1>
@@ -2044,9 +2102,9 @@
       <table class="certificate-table history-table"><tbody>
         <tr><th rowspan="3" class="section-label">상벌<br />사항</th><th colspan="3">포 상</th><th colspan="4">징 계</th></tr>
         <tr><th>연월일</th><th>종류</th><th>시행청</th><th>연월일</th><th colspan="2">종류</th><th>시행청</th></tr>
-        <tr><td></td><td>${escapeHtml($('field-award').value.trim())}</td><td></td><td></td><td colspan="2">${escapeHtml($('field-discipline').value.trim())}</td><td></td></tr>
+        <tr><td>${escapeHtml(history.award.date)}</td><td>${escapeHtml(history.award.type)}</td><td>${escapeHtml(history.award.agency)}</td><td>${escapeHtml(history.discipline.date)}</td><td colspan="2">${escapeHtml(history.discipline.type)}</td><td>${escapeHtml(history.discipline.agency)}</td></tr>
         <tr><th rowspan="2" class="section-label">직위<br />해제</th><th>연월일</th><th colspan="5">사 유</th><th>처분청</th></tr>
-        <tr><td></td><td colspan="5">${escapeHtml($('field-suspension').value.trim())}</td><td></td></tr>
+        <tr><td>${escapeHtml(history.suspension.date)}</td><td colspan="5">${escapeHtml(history.suspension.reason)}</td><td>${escapeHtml(history.suspension.agency)}</td></tr>
         <tr><th class="section-label">용도</th><td colspan="7">${escapeHtml($('field-purpose').value.trim())}</td></tr>
       </tbody></table>
       <div class="certificate-footer">
@@ -2132,9 +2190,7 @@
   function resetIssueForm() {
     $('field-address').value = '';
     $('field-purpose').value = state.settings.purpose;
-    $('field-award').value = '해당없음';
-    $('field-discipline').value = '해당없음';
-    $('field-suspension').value = '해당없음';
+    resetHistoryFields();
     state.rrnDisplay = false;
     clearRrnInput();
     state.vacationOptions.clear();
@@ -2161,6 +2217,15 @@
       if (birth && dateToInput(parsedRrn.birth) !== dateToInput(birth)) return { ok: false, message: '주민등록번호 앞 6자리와 생년월일이 일치하지 않습니다.' };
     }
     if (state.certificateMode === 'hours' && selected.some(record => !record.hours)) return { ok: false, message: '선택한 경력 중 소정근로시간이 입력되지 않은 자료가 있습니다.' };
+    const historyChecks = [
+      ['award', '포상', ['field-award-date', 'field-award-type', 'field-award-agency']],
+      ['discipline', '징계', ['field-discipline-date', 'field-discipline-type', 'field-discipline-agency']],
+      ['suspension', '직위해제', ['field-suspension-date', 'field-suspension-reason', 'field-suspension-agency']]
+    ];
+    for (const [type, label, ids] of historyChecks) {
+      if (!$(`field-${type}-enabled`).checked) continue;
+      if (ids.some(id => !$(id).value.trim())) return { ok: false, message: `${label} 사항의 연월일과 내용을 모두 입력해 주세요.` };
+    }
     const unresolvedFollowUp = getPendingFollowUpEvents().find(eventRecord => eventRecord.followUpCandidateId && state.selectedRecordIds.has(eventRecord.followUpCandidateId));
     if (unresolvedFollowUp) {
       const dateLabel = unresolvedFollowUp.followUpDate ? formatDateNatural(unresolvedFollowUp.followUpDate) : '날짜 미확인';
@@ -2401,9 +2466,7 @@
     $('field-address').value = '';
     $('field-retirement').value = '';
     $('field-purpose').value = state.settings.purpose;
-    $('field-award').value = '해당없음';
-    $('field-discipline').value = '해당없음';
-    $('field-suspension').value = '해당없음';
+    resetHistoryFields();
     setToday();
   }
 

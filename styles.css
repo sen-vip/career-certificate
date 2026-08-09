@@ -897,3 +897,16 @@ button.status-pill.actionable:focus-visible {
 .followup-reason-box select:focus-visible,
 .followup-reason-box input:focus-visible { outline: 2px solid #6366f1; outline-offset: 1px; border-color: #6366f1; }
 .followup-actions .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+
+/* v0.6.3: 상벌·직위해제 구조화 입력 */
+.history-entry-list { display: grid; gap: 10px; }
+.history-entry-card { border: 1px solid var(--line); border-radius: 13px; padding: 12px 13px; background: #fafbfc; }
+.history-entry-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.history-entry-heading strong { color: #344054; font-size: 13px; }
+.history-toggle { display: inline-flex !important; grid-template-columns: auto auto !important; align-items: center; gap: 6px !important; font-size: 12px !important; cursor: pointer; }
+.history-toggle input { width: 16px !important; height: 16px; margin: 0; padding: 0; }
+.history-empty-help { margin: 6px 0 0; color: #98a2b3; font-size: 11px; line-height: 1.45; }
+.history-entry-fields { margin-top: 11px; }
+.form-grid.three { grid-template-columns: 0.9fr 1.2fr 1.3fr; }
+@media (max-width: 720px) { .form-grid.three { grid-template-columns: 1fr; } }

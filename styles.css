@@ -912,10 +912,13 @@ button.status-pill.actionable:focus-visible {
 @media (max-width: 720px) { .form-grid.three { grid-template-columns: 1fr; } }
 
 
-/* v0.6.4: 시간강사 주당 수업량 선택 안내 */
-.weekly-hours-dialog { width: min(560px, calc(100vw - 40px)); }
-.weekly-hours-context { margin: 0 0 10px; font-weight: 800; color: #334155; }
-.weekly-hours-message { margin: 0 0 18px; line-height: 1.65; color: #475569; }
-.weekly-hours-input-label { display: grid; gap: 8px; font-weight: 800; color: #1e293b; }
-.weekly-hours-input-label input { width: 100%; }
-.field-help { margin: 9px 0 0; color: #64748b; font-size: .88rem; line-height: 1.5; }
+
+
+/* v0.6.5: 상벌·징계·직위해제 반복 입력 */
+.history-repeat-list { display: grid; gap: 9px; margin-top: 10px; }
+.history-none { margin: 0; padding: 10px 11px; border: 1px dashed #d0d5dd; border-radius: 10px; color: #98a2b3; font-size: 11px; line-height: 1.45; background: #fff; }
+.history-repeat-row { display: grid; grid-template-columns: 24px minmax(0,1fr) auto; gap: 9px; align-items: end; padding: 10px; border: 1px solid #e4e7ec; border-radius: 11px; background: #fff; }
+.history-repeat-number { align-self: center; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; background: #eef2ff; color: #4338ca; font-size: 11px; font-weight: 900; }
+.history-remove { min-height: 36px; padding: 0 9px; border: 1px solid #f3b5b5; border-radius: 8px; background: #fff; color: #b42318; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
+.history-remove:hover { background: #fff5f5; }
+@media (max-width: 720px) { .history-repeat-row { grid-template-columns: 24px minmax(0,1fr); } .history-remove { grid-column: 2; justify-self: end; } }

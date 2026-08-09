@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#0f172a" />
-  <title>경력증명 자동화 v0.6.4</title>
+  <title>경력증명 자동화 v0.6.5</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2216%22 fill=%22%230f172a%22/><path d=%22M18 15h28a4 4 0 0 1 4 4v34H14V19a4 4 0 0 1 4-4Z%22 fill=%22white%22/><path d=%22M22 25h20M22 33h20M22 41h12%22 stroke=%22%234f46e5%22 stroke-width=%224%22 stroke-linecap=%22round%22/></svg>" />
   <link rel="stylesheet" href="styles.css" />
   <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -22,7 +22,7 @@
       </div>
       <div class="header-actions">
         <span class="privacy-badge"><span class="dot"></span>외부 전송 없이 처리</span>
-        <span class="version-badge">v0.6.4</span>
+        <span class="version-badge">v0.6.5</span>
       </div>
     </header>
 
@@ -158,42 +158,16 @@
                 <summary>상벌·직위해제 내용 입력</summary>
                 <div class="history-entry-list details-body">
                   <section class="history-entry-card">
-                    <div class="history-entry-heading">
-                      <strong>포상</strong>
-                      <label class="history-toggle"><input id="field-award-enabled" type="checkbox" /> 있음</label>
-                    </div>
-                    <p class="history-empty-help">기본값은 ‘해당없음’입니다. 실제 포상이 있는 경우에만 체크하세요.</p>
-                    <div id="field-award-fields" class="form-grid three history-entry-fields" hidden>
-                      <label>연월일<input id="field-award-date" type="date" /></label>
-                      <label>종류<input id="field-award-type" type="text" placeholder="예: 교육감 표창" /></label>
-                      <label>시행청<input id="field-award-agency" type="text" placeholder="예: 서울특별시교육청" /></label>
-                    </div>
+                    <div class="history-entry-heading"><strong>포상</strong><button class="btn small ghost" type="button" data-add-history="award">+ 포상 추가</button></div>
+                    <div id="history-award-list" class="history-repeat-list"></div>
                   </section>
-
                   <section class="history-entry-card">
-                    <div class="history-entry-heading">
-                      <strong>징계</strong>
-                      <label class="history-toggle"><input id="field-discipline-enabled" type="checkbox" /> 있음</label>
-                    </div>
-                    <p class="history-empty-help">기본값은 ‘해당없음’입니다. 실제 징계사항이 있는 경우에만 체크하세요.</p>
-                    <div id="field-discipline-fields" class="form-grid three history-entry-fields" hidden>
-                      <label>연월일<input id="field-discipline-date" type="date" /></label>
-                      <label>종류<input id="field-discipline-type" type="text" placeholder="징계 종류" /></label>
-                      <label>시행청<input id="field-discipline-agency" type="text" placeholder="시행청" /></label>
-                    </div>
+                    <div class="history-entry-heading"><strong>징계</strong><button class="btn small ghost" type="button" data-add-history="discipline">+ 징계 추가</button></div>
+                    <div id="history-discipline-list" class="history-repeat-list"></div>
                   </section>
-
                   <section class="history-entry-card">
-                    <div class="history-entry-heading">
-                      <strong>직위해제</strong>
-                      <label class="history-toggle"><input id="field-suspension-enabled" type="checkbox" /> 있음</label>
-                    </div>
-                    <p class="history-empty-help">기본값은 ‘해당없음’입니다. 실제 직위해제 사항이 있는 경우에만 체크하세요.</p>
-                    <div id="field-suspension-fields" class="form-grid three history-entry-fields" hidden>
-                      <label>연월일<input id="field-suspension-date" type="date" /></label>
-                      <label>사유<input id="field-suspension-reason" type="text" placeholder="직위해제 사유" /></label>
-                      <label>처분청<input id="field-suspension-agency" type="text" placeholder="처분청" /></label>
-                    </div>
+                    <div class="history-entry-heading"><strong>직위해제</strong><button class="btn small ghost" type="button" data-add-history="suspension">+ 직위해제 추가</button></div>
+                    <div id="history-suspension-list" class="history-repeat-list"></div>
                   </section>
                 </div>
               </details>
@@ -357,27 +331,6 @@
       <div class="dialog-actions">
         <button class="btn ghost" type="button" data-close-edit-dialog>취소</button>
         <button id="save-record" class="btn primary" value="default" type="submit">수정 저장</button>
-      </div>
-    </form>
-  </dialog>
-
-
-  <dialog id="weekly-hours-dialog" class="edit-dialog weekly-hours-dialog">
-    <form method="dialog" id="weekly-hours-form">
-      <div class="dialog-heading">
-        <div><span class="eyebrow">시간강사 경력 확인</span><h2>주당 수업량이 비어 있습니다</h2></div>
-        <button class="icon-button" type="button" data-close-weekly-hours-dialog aria-label="닫기">×</button>
-      </div>
-      <div class="dialog-body">
-        <input id="weekly-hours-record-id" type="hidden" />
-        <p id="weekly-hours-context" class="weekly-hours-context"></p>
-        <p class="weekly-hours-message">시간강사 경력 확인에 중요한 정보입니다. 학교에 따라 <strong>주당 6시간</strong>, <strong>8시수</strong>처럼 다르게 기재할 수 있어요. 필요하면 지금 입력해 주세요.</p>
-        <label class="weekly-hours-input-label">주당 수업량<input id="weekly-hours-input" type="text" placeholder="예: 6시간 또는 8시수" autocomplete="off" /></label>
-        <p class="field-help">입력하지 않아도 경력증명서 미리보기와 인쇄는 계속할 수 있습니다.</p>
-      </div>
-      <div class="dialog-actions">
-        <button id="weekly-hours-skip" class="btn ghost" type="button">입력 없이 계속</button>
-        <button class="btn primary" type="submit">입력하고 반영</button>
       </div>
     </form>
   </dialog>

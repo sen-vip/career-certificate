@@ -80,7 +80,7 @@
     people: [],
     selectedPersonKey: null,
     selectedRecordIds: new Set(),
-    weeklyHoursPromptedIds: new Set(),
+    historyEntries: { award: [], discipline: [], suspension: [] },
     fileName: '',
     ledgerType: 'none',
     certificateMode: 'general',
@@ -119,9 +119,6 @@
     editDialog: $('edit-dialog'),
     editForm: $('edit-form'),
     editIssues: $('edit-issues'),
-    weeklyHoursDialog: $('weekly-hours-dialog'),
-    weeklyHoursForm: $('weekly-hours-form'),
-    weeklyHoursInput: $('weekly-hours-input'),
     toast: $('toast')
   };
 
@@ -131,6 +128,7 @@
     bindTabs();
     bindUpload();
     bindFormFields();
+    bindHistoryControls();
     bindBirthInput();
     bindRrnInput();
     bindModeControls();
@@ -139,7 +137,6 @@
     bindSettings();
     bindLedger();
     bindEditDialog();
-    bindWeeklyHoursDialog();
     bindPreviewFit();
     setToday();
     applySettingsToInputs();
@@ -319,20 +316,8 @@
   }
 
   function bindFormFields() {
-    const fields = [
-      'field-name', 'field-birth', 'field-address', 'field-purpose', 'field-issue-date', 'field-retirement',
-      'field-award-date', 'field-award-type', 'field-award-agency',
-      'field-discipline-date', 'field-discipline-type', 'field-discipline-agency',
-      'field-suspension-date', 'field-suspension-reason', 'field-suspension-agency'
-    ];
+    const fields = ['field-name', 'field-birth', 'field-address', 'field-purpose', 'field-issue-date', 'field-retirement'];
     fields.forEach(id => $(id).addEventListener('input', renderPreview));
-    ['award', 'discipline', 'suspension'].forEach(type => {
-      $(`field-${type}-enabled`).addEventListener('change', () => {
-        updateHistoryFieldVisibility();
-        renderPreview();
-      });
-    });
-    updateHistoryFieldVisibility();
     els.personSearch.addEventListener('input', renderPeople);
     $('reset-form').addEventListener('click', resetIssueForm);
     $('print-certificate').addEventListener('click', () => {
@@ -342,49 +327,113 @@
     });
   }
 
-  function updateHistoryFieldVisibility() {
-    ['award', 'discipline', 'suspension'].forEach(type => {
-      const enabled = $(`field-${type}-enabled`).checked;
-      $(`field-${type}-fields`).hidden = !enabled;
+  function createHistoryEntry(type) {
+    return {
+      id: `history-${type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      date: '',
+      ...(type === 'suspension' ? { reason: '' } : { type: '' }),
+      agency: ''
+    };
+  }
+
+  function bindHistoryControls() {
+    const section = document.querySelector('.history-fields');
+    if (!section) return;
+    section.addEventListener('click', event => {
+      const add = event.target.closest('[data-add-history]');
+      if (add) {
+        const type = add.dataset.addHistory;
+        if (!state.historyEntries[type]) return;
+        const entry = createHistoryEntry(type);
+        state.historyEntries[type].push(entry);
+        renderHistoryEditors();
+        renderPreview();
+        window.setTimeout(() => section.querySelector(`[data-history-id="${cssEscape(entry.id)}"] [data-history-field="date"]`)?.focus(), 0);
+        return;
+      }
+      const remove = event.target.closest('[data-remove-history]');
+      if (remove) {
+        const type = remove.dataset.historyType;
+        if (!state.historyEntries[type]) return;
+        state.historyEntries[type] = state.historyEntries[type].filter(entry => entry.id !== remove.dataset.removeHistory);
+        renderHistoryEditors();
+        renderPreview();
+      }
+    });
+    const sync = event => {
+      const input = event.target.closest('[data-history-field]');
+      if (!input) return;
+      const type = input.dataset.historyType;
+      const entry = state.historyEntries[type]?.find(item => item.id === input.dataset.historyId);
+      if (!entry) return;
+      entry[input.dataset.historyField] = input.value;
+      renderPreview();
+    };
+    section.addEventListener('input', sync);
+    section.addEventListener('change', sync);
+    renderHistoryEditors();
+  }
+
+  function renderHistoryEditors() {
+    const specs = {
+      award: { label: '포상', middle: '종류', middleKey: 'type', placeholder: '예: 교육감 표창', agency: '시행청' },
+      discipline: { label: '징계', middle: '종류', middleKey: 'type', placeholder: '징계 종류', agency: '시행청' },
+      suspension: { label: '직위해제', middle: '사유', middleKey: 'reason', placeholder: '직위해제 사유', agency: '처분청' }
+    };
+    Object.entries(specs).forEach(([type, spec]) => {
+      const list = $(`history-${type}-list`);
+      if (!list) return;
+      const entries = state.historyEntries[type] || [];
+      list.innerHTML = entries.length ? entries.map((entry, index) => `
+        <div class="history-repeat-row" data-history-id="${escapeAttr(entry.id)}">
+          <div class="history-repeat-number">${index + 1}</div>
+          <div class="form-grid three history-entry-fields">
+            <label>연월일<input type="date" data-history-type="${type}" data-history-id="${escapeAttr(entry.id)}" data-history-field="date" value="${escapeAttr(entry.date || '')}" /></label>
+            <label>${spec.middle}<input type="text" data-history-type="${type}" data-history-id="${escapeAttr(entry.id)}" data-history-field="${spec.middleKey}" value="${escapeAttr(entry[spec.middleKey] || '')}" placeholder="${escapeAttr(spec.placeholder)}" /></label>
+            <label>${spec.agency}<input type="text" data-history-type="${type}" data-history-id="${escapeAttr(entry.id)}" data-history-field="agency" value="${escapeAttr(entry.agency || '')}" placeholder="${escapeAttr(spec.agency)}" /></label>
+          </div>
+          <button class="history-remove" type="button" data-history-type="${type}" data-remove-history="${escapeAttr(entry.id)}" aria-label="${spec.label} ${index + 1} 삭제">삭제</button>
+        </div>`).join('') : `<p class="history-none">등록된 ${spec.label} 내역이 없습니다. 증명서에는 ‘해당없음’으로 표시됩니다.</p>`;
     });
   }
 
   function resetHistoryFields() {
-    ['award', 'discipline', 'suspension'].forEach(type => {
-      $(`field-${type}-enabled`).checked = false;
-    });
-    ['field-award-date', 'field-award-type', 'field-award-agency',
-      'field-discipline-date', 'field-discipline-type', 'field-discipline-agency',
-      'field-suspension-date', 'field-suspension-reason', 'field-suspension-agency'
-    ].forEach(id => { $(id).value = ''; });
-    updateHistoryFieldVisibility();
+    state.historyEntries = { award: [], discipline: [], suspension: [] };
+    renderHistoryEditors();
   }
 
   function getHistoryPreviewValues() {
-    const awardEnabled = $('field-award-enabled').checked;
-    const disciplineEnabled = $('field-discipline-enabled').checked;
-    const suspensionEnabled = $('field-suspension-enabled').checked;
-    const formatHistoryDate = id => {
-      const parsed = parseDateStrict($(id).value);
-      return parsed ? formatDate(parsed) : '';
-    };
+    const formatEntry = entry => ({ ...entry, date: entry.date && parseDateStrict(entry.date) ? formatDate(parseDateStrict(entry.date)) : '' });
     return {
-      award: awardEnabled ? {
-        date: formatHistoryDate('field-award-date'),
-        type: $('field-award-type').value.trim(),
-        agency: $('field-award-agency').value.trim()
-      } : { date: '', type: '해당없음', agency: '' },
-      discipline: disciplineEnabled ? {
-        date: formatHistoryDate('field-discipline-date'),
-        type: $('field-discipline-type').value.trim(),
-        agency: $('field-discipline-agency').value.trim()
-      } : { date: '', type: '해당없음', agency: '' },
-      suspension: suspensionEnabled ? {
-        date: formatHistoryDate('field-suspension-date'),
-        reason: $('field-suspension-reason').value.trim(),
-        agency: $('field-suspension-agency').value.trim()
-      } : { date: '', reason: '해당없음', agency: '' }
+      award: state.historyEntries.award.map(formatEntry),
+      discipline: state.historyEntries.discipline.map(formatEntry),
+      suspension: state.historyEntries.suspension.map(formatEntry)
     };
+  }
+
+  function buildHistoryTable(history) {
+    const awardCount = history.award.length;
+    const disciplineCount = history.discipline.length;
+    const pairRows = Math.max(1, awardCount, disciplineCount);
+    const pairHtml = Array.from({ length: pairRows }, (_, index) => {
+      const award = history.award[index] || (index === 0 && !awardCount ? { date: '', type: '해당없음', agency: '' } : { date: '', type: '', agency: '' });
+      const discipline = history.discipline[index] || (index === 0 && !disciplineCount ? { date: '', type: '해당없음', agency: '' } : { date: '', type: '', agency: '' });
+      return `<tr><td>${escapeHtml(award.date)}</td><td>${escapeHtml(award.type)}</td><td>${escapeHtml(award.agency)}</td><td>${escapeHtml(discipline.date)}</td><td colspan="2">${escapeHtml(discipline.type)}</td><td>${escapeHtml(discipline.agency)}</td></tr>`;
+    }).join('');
+    const suspensionCount = history.suspension.length;
+    const suspensionRows = Math.max(1, suspensionCount);
+    const suspensionHtml = Array.from({ length: suspensionRows }, (_, index) => {
+      const item = history.suspension[index] || (index === 0 ? { date: '', reason: '해당없음', agency: '' } : { date: '', reason: '', agency: '' });
+      return `<tr><td>${escapeHtml(item.date)}</td><td colspan="5">${escapeHtml(item.reason)}</td><td>${escapeHtml(item.agency)}</td></tr>`;
+    }).join('');
+    return `<table class="certificate-table history-table"><tbody>
+      <tr><th rowspan="${pairRows + 2}" class="section-label">상벌<br />사항</th><th colspan="3">포 상</th><th colspan="4">징 계</th></tr>
+      <tr><th>연월일</th><th>종류</th><th>시행청</th><th>연월일</th><th colspan="2">종류</th><th>시행청</th></tr>
+      ${pairHtml}
+      <tr><th rowspan="${suspensionRows + 1}" class="section-label">직위<br />해제</th><th>연월일</th><th colspan="5">사 유</th><th>처분청</th></tr>
+      ${suspensionHtml}
+      <tr><th class="section-label">용도</th><td colspan="7">${escapeHtml($('field-purpose').value.trim())}</td></tr>
+    </tbody></table>`;
   }
 
   function bindBirthInput() {
@@ -443,7 +492,6 @@
       updateRetirementFromSelection();
       renderCareers();
       renderPreview();
-      promptFirstMissingWeeklyHours();
     });
     $('clear-careers').addEventListener('click', () => {
       state.selectedRecordIds.clear();
@@ -451,72 +499,6 @@
       renderCareers();
       renderPreview();
     });
-  }
-
-  function bindWeeklyHoursDialog() {
-    const dialog = els.weeklyHoursDialog;
-    const form = els.weeklyHoursForm;
-    const input = els.weeklyHoursInput;
-    if (!dialog || !form || !input) return;
-
-    qsa('[data-close-weekly-hours-dialog]').forEach(button => button.addEventListener('click', () => {
-      const id = $('weekly-hours-record-id').value;
-      if (id) state.weeklyHoursPromptedIds.add(id);
-      dialog.close();
-    }));
-
-    $('weekly-hours-skip')?.addEventListener('click', () => {
-      const id = $('weekly-hours-record-id').value;
-      if (id) state.weeklyHoursPromptedIds.add(id);
-      dialog.close();
-      toast('주당 수업량 없이 계속 진행합니다.');
-    });
-
-    form.addEventListener('submit', event => {
-      event.preventDefault();
-      const id = $('weekly-hours-record-id').value;
-      const raw = input.value.trim();
-      const record = state.records.find(item => item.id === id);
-      if (!record) return dialog.close();
-      if (!raw) {
-        input.focus();
-        toast('주당 수업량을 입력해 주세요. 예: 6시간, 8시수', true);
-        return;
-      }
-      const parsed = parseInstructorNumber(raw);
-      if (parsed === null) {
-        input.focus();
-        toast('주당 수업량을 확인해 주세요. 예: 6시간, 8시수', true);
-        return;
-      }
-      record.weeklyHoursRaw = raw;
-      record.weeklyHours = parsed;
-      state.weeklyHoursPromptedIds.add(id);
-      analyzeRecords();
-      dialog.close();
-      renderAll();
-      toast(`주당 수업량을 ${formatInstructorWeeklyAmount(record)}로 반영했습니다.`);
-    });
-  }
-
-  function promptWeeklyHoursIfNeeded(record) {
-    if (state.ledgerType !== 'instructor' || !record || hasError(record)) return false;
-    if (text(record.weeklyHoursRaw) || record.weeklyHours !== null) return false;
-    if (state.weeklyHoursPromptedIds.has(record.id)) return false;
-    const dialog = els.weeklyHoursDialog;
-    if (!dialog || dialog.open) return false;
-    $('weekly-hours-record-id').value = record.id;
-    $('weekly-hours-context').textContent = `${record.name || '선택한 대상자'} · ${formatRecordPeriod(record)}`;
-    els.weeklyHoursInput.value = '';
-    dialog.showModal();
-    window.setTimeout(() => els.weeklyHoursInput.focus(), 80);
-    return true;
-  }
-
-  function promptFirstMissingWeeklyHours() {
-    if (state.ledgerType !== 'instructor') return;
-    const record = getSelectedRecords().find(item => !text(item.weeklyHoursRaw) && item.weeklyHours === null && !state.weeklyHoursPromptedIds.has(item.id));
-    if (record) promptWeeklyHoursIfNeeded(record);
   }
 
   function bindVacationControls() {
@@ -990,8 +972,8 @@
     clearRrnInput();
     state.selectedPersonKey = null;
     state.selectedRecordIds.clear();
-    state.weeklyHoursPromptedIds.clear();
     state.vacationOptions.clear();
+    resetHistoryFields();
     state.records = rows
       .filter(row => !isTemplateExampleRow(row))
       .map((row, index) => normalizeRecord(row, index, ledgerType))
@@ -1307,6 +1289,7 @@
         // 시간강사 보조정보는 증명서 발급을 막지 않는다.
         // 담당구분은 선택사항이며, 입력되어 있으면 근무부서 표시 형식을 보조하는 용도로만 사용한다.
         if (!record.dutyContent) issues.push(issue('warning', '담당내용이 비어 있습니다. 필요하면 입력해 주세요.', 'edit-instructor-duty-content'));
+        if (!text(record.weeklyHoursRaw) && record.weeklyHours === null) issues.push(issue('warning', '주당 수업량이 비어 있습니다. 대장 수정에서 입력해 주세요. 예: 6시간, 8시수. 입력하지 않아도 증명서 발급은 가능합니다.', 'edit-instructor-weekly-hours'));
         if (record.weeklyHoursRaw && record.weeklyHours === null) issues.push(issue('warning', '주당 수업량을 해석할 수 없습니다. 예: 6시간, 8시수. 미기재 상태로도 증명서 발급은 가능합니다.', 'edit-instructor-weekly-hours'));
         if (record.totalWeeksRaw && record.totalWeeks === null) issues.push(issue('warning', '총주수를 숫자로 해석할 수 없습니다. 미기재 상태로도 증명서 발급은 가능합니다.', 'edit-instructor-total-weeks'));
         if (record.vacationRaw && record.vacationExcluded === null) issues.push(issue('warning', '방학기간 제외 값을 확인해 주세요. 미확인 상태로도 증명서 발급은 가능합니다.', 'edit-instructor-vacation'));
@@ -1496,7 +1479,6 @@
     renderRrnControls();
     renderCareers();
     renderPreview();
-    promptFirstMissingWeeklyHours();
   }
 
   function renderCareers() {
@@ -1701,7 +1683,6 @@
     updateRetirementFromSelection();
     renderCareers();
     renderPreview();
-    if (checked) promptWeeklyHoursIfNeeded(state.records.find(record => record.id === id));
   }
 
   function updateRetirementFromSelection() {
@@ -2174,14 +2155,7 @@
         <tr><th class="section-label">근무연한</th><td colspan="3">${selected.length ? escapeHtml(formatDuration(total)) : ''}</td><th>최종직위 또는 직급</th><td colspan="3">${escapeHtml(finalPosition || '')}</td></tr>
         <tr><th class="section-label">퇴직사유</th><td colspan="7">${escapeHtml($('field-retirement').value.trim())}</td></tr>
       </tbody></table>
-      <table class="certificate-table history-table"><tbody>
-        <tr><th rowspan="3" class="section-label">상벌<br />사항</th><th colspan="3">포 상</th><th colspan="4">징 계</th></tr>
-        <tr><th>연월일</th><th>종류</th><th>시행청</th><th>연월일</th><th colspan="2">종류</th><th>시행청</th></tr>
-        <tr><td>${escapeHtml(history.award.date)}</td><td>${escapeHtml(history.award.type)}</td><td>${escapeHtml(history.award.agency)}</td><td>${escapeHtml(history.discipline.date)}</td><td colspan="2">${escapeHtml(history.discipline.type)}</td><td>${escapeHtml(history.discipline.agency)}</td></tr>
-        <tr><th rowspan="2" class="section-label">직위<br />해제</th><th>연월일</th><th colspan="5">사 유</th><th>처분청</th></tr>
-        <tr><td>${escapeHtml(history.suspension.date)}</td><td colspan="5">${escapeHtml(history.suspension.reason)}</td><td>${escapeHtml(history.suspension.agency)}</td></tr>
-        <tr><th class="section-label">용도</th><td colspan="7">${escapeHtml($('field-purpose').value.trim())}</td></tr>
-      </tbody></table>
+      ${buildHistoryTable(history)}
       <div class="certificate-footer">
         <p class="certify-text">위와 같이 경력을 증명합니다.</p>
         <p class="issue-date">${formatIssueDate(issueDate)}</p>
@@ -2292,14 +2266,14 @@
       if (birth && dateToInput(parsedRrn.birth) !== dateToInput(birth)) return { ok: false, message: '주민등록번호 앞 6자리와 생년월일이 일치하지 않습니다.' };
     }
     if (state.certificateMode === 'hours' && selected.some(record => !record.hours)) return { ok: false, message: '선택한 경력 중 소정근로시간이 입력되지 않은 자료가 있습니다.' };
-    const historyChecks = [
-      ['award', '포상', ['field-award-date', 'field-award-type', 'field-award-agency']],
-      ['discipline', '징계', ['field-discipline-date', 'field-discipline-type', 'field-discipline-agency']],
-      ['suspension', '직위해제', ['field-suspension-date', 'field-suspension-reason', 'field-suspension-agency']]
-    ];
-    for (const [type, label, ids] of historyChecks) {
-      if (!$(`field-${type}-enabled`).checked) continue;
-      if (ids.some(id => !$(id).value.trim())) return { ok: false, message: `${label} 사항의 연월일과 내용을 모두 입력해 주세요.` };
+    const historySpecs = {
+      award: ['포상', ['date', 'type', 'agency']],
+      discipline: ['징계', ['date', 'type', 'agency']],
+      suspension: ['직위해제', ['date', 'reason', 'agency']]
+    };
+    for (const [type, [label, fields]] of Object.entries(historySpecs)) {
+      const incomplete = state.historyEntries[type].find(entry => fields.some(field => !text(entry[field])));
+      if (incomplete) return { ok: false, message: `${label} 사항의 연월일과 내용을 모두 입력해 주세요.` };
     }
     const unresolvedFollowUp = getPendingFollowUpEvents().find(eventRecord => eventRecord.followUpCandidateId && state.selectedRecordIds.has(eventRecord.followUpCandidateId));
     if (unresolvedFollowUp) {

@@ -57,10 +57,10 @@
   ];
 
   const INSTRUCTOR_DEMO_ROWS = [
-    { roleType: '시간강사', dutyType: '교과', dutyContent: '음악과', name: '강하늘', identity: '1990-01-01', start: '2020-03-02', end: '2021-02-02', weeklyHours: 6, totalWeeks: 34, vacationExcluded: '아니오', workTime: '' },
+    { roleType: '시간강사', dutyType: '교과', dutyContent: '음악과', name: '강하늘', identity: '1990-01-01', start: '2020-03-02', end: '2021-02-02', weeklyHours: '6시간', totalWeeks: 34, vacationExcluded: '아니오', workTime: '' },
     { roleType: '시간강사', dutyType: '교과', dutyContent: '음악과', name: '강하늘', identity: '900101-1234567', start: '2021-03-02', end: '2022-02-09', weeklyHours: 9, totalWeeks: 35, vacationExcluded: '아니오', workTime: '' },
     { roleType: '시간강사', dutyType: '프로그램', dutyContent: '치어리딩', name: '윤별빛', identity: '1992-04-18', start: '2017-03-03', end: '2018-01-31', weeklyHours: 2, totalWeeks: '', vacationExcluded: '예', workTime: '' },
-    { roleType: '시간강사', dutyType: '프로그램', dutyContent: '스포츠6+자유2', name: '정다온', identity: '1988-08-21', start: '2018-03-01', end: '2018-07-20', weeklyHours: 8, totalWeeks: '', vacationExcluded: '아니오', workTime: '' },
+    { roleType: '시간강사', dutyType: '프로그램', dutyContent: '스포츠6+자유2', name: '정다온', identity: '1988-08-21', start: '2018-03-01', end: '2018-07-20', weeklyHours: '8시수', totalWeeks: '', vacationExcluded: '아니오', workTime: '' },
     { roleType: '전문강사', dutyType: '교과', dutyContent: '영어', name: '이새봄', identity: '1985-12-12', start: '2024-03-01', end: '2025-02-28', weeklyHours: 12, totalWeeks: '', vacationExcluded: '아니오', workTime: '월·수·금' }
   ];
 
@@ -80,6 +80,7 @@
     people: [],
     selectedPersonKey: null,
     selectedRecordIds: new Set(),
+    weeklyHoursPromptedIds: new Set(),
     fileName: '',
     ledgerType: 'none',
     certificateMode: 'general',
@@ -118,6 +119,9 @@
     editDialog: $('edit-dialog'),
     editForm: $('edit-form'),
     editIssues: $('edit-issues'),
+    weeklyHoursDialog: $('weekly-hours-dialog'),
+    weeklyHoursForm: $('weekly-hours-form'),
+    weeklyHoursInput: $('weekly-hours-input'),
     toast: $('toast')
   };
 
@@ -135,6 +139,7 @@
     bindSettings();
     bindLedger();
     bindEditDialog();
+    bindWeeklyHoursDialog();
     bindPreviewFit();
     setToday();
     applySettingsToInputs();
@@ -438,6 +443,7 @@
       updateRetirementFromSelection();
       renderCareers();
       renderPreview();
+      promptFirstMissingWeeklyHours();
     });
     $('clear-careers').addEventListener('click', () => {
       state.selectedRecordIds.clear();
@@ -445,6 +451,72 @@
       renderCareers();
       renderPreview();
     });
+  }
+
+  function bindWeeklyHoursDialog() {
+    const dialog = els.weeklyHoursDialog;
+    const form = els.weeklyHoursForm;
+    const input = els.weeklyHoursInput;
+    if (!dialog || !form || !input) return;
+
+    qsa('[data-close-weekly-hours-dialog]').forEach(button => button.addEventListener('click', () => {
+      const id = $('weekly-hours-record-id').value;
+      if (id) state.weeklyHoursPromptedIds.add(id);
+      dialog.close();
+    }));
+
+    $('weekly-hours-skip')?.addEventListener('click', () => {
+      const id = $('weekly-hours-record-id').value;
+      if (id) state.weeklyHoursPromptedIds.add(id);
+      dialog.close();
+      toast('주당 수업량 없이 계속 진행합니다.');
+    });
+
+    form.addEventListener('submit', event => {
+      event.preventDefault();
+      const id = $('weekly-hours-record-id').value;
+      const raw = input.value.trim();
+      const record = state.records.find(item => item.id === id);
+      if (!record) return dialog.close();
+      if (!raw) {
+        input.focus();
+        toast('주당 수업량을 입력해 주세요. 예: 6시간, 8시수', true);
+        return;
+      }
+      const parsed = parseInstructorNumber(raw);
+      if (parsed === null) {
+        input.focus();
+        toast('주당 수업량을 확인해 주세요. 예: 6시간, 8시수', true);
+        return;
+      }
+      record.weeklyHoursRaw = raw;
+      record.weeklyHours = parsed;
+      state.weeklyHoursPromptedIds.add(id);
+      analyzeRecords();
+      dialog.close();
+      renderAll();
+      toast(`주당 수업량을 ${formatInstructorWeeklyAmount(record)}로 반영했습니다.`);
+    });
+  }
+
+  function promptWeeklyHoursIfNeeded(record) {
+    if (state.ledgerType !== 'instructor' || !record || hasError(record)) return false;
+    if (text(record.weeklyHoursRaw) || record.weeklyHours !== null) return false;
+    if (state.weeklyHoursPromptedIds.has(record.id)) return false;
+    const dialog = els.weeklyHoursDialog;
+    if (!dialog || dialog.open) return false;
+    $('weekly-hours-record-id').value = record.id;
+    $('weekly-hours-context').textContent = `${record.name || '선택한 대상자'} · ${formatRecordPeriod(record)}`;
+    els.weeklyHoursInput.value = '';
+    dialog.showModal();
+    window.setTimeout(() => els.weeklyHoursInput.focus(), 80);
+    return true;
+  }
+
+  function promptFirstMissingWeeklyHours() {
+    if (state.ledgerType !== 'instructor') return;
+    const record = getSelectedRecords().find(item => !text(item.weeklyHoursRaw) && item.weeklyHours === null && !state.weeklyHoursPromptedIds.has(item.id));
+    if (record) promptWeeklyHoursIfNeeded(record);
   }
 
   function bindVacationControls() {
@@ -918,6 +990,7 @@
     clearRrnInput();
     state.selectedPersonKey = null;
     state.selectedRecordIds.clear();
+    state.weeklyHoursPromptedIds.clear();
     state.vacationOptions.clear();
     state.records = rows
       .filter(row => !isTemplateExampleRow(row))
@@ -1234,7 +1307,7 @@
         // 시간강사 보조정보는 증명서 발급을 막지 않는다.
         // 담당구분은 선택사항이며, 입력되어 있으면 근무부서 표시 형식을 보조하는 용도로만 사용한다.
         if (!record.dutyContent) issues.push(issue('warning', '담당내용이 비어 있습니다. 필요하면 입력해 주세요.', 'edit-instructor-duty-content'));
-        if (record.weeklyHoursRaw && record.weeklyHours === null) issues.push(issue('warning', '주당수업시간을 숫자로 해석할 수 없습니다. 미기재 상태로도 증명서 발급은 가능합니다.', 'edit-instructor-weekly-hours'));
+        if (record.weeklyHoursRaw && record.weeklyHours === null) issues.push(issue('warning', '주당 수업량을 해석할 수 없습니다. 예: 6시간, 8시수. 미기재 상태로도 증명서 발급은 가능합니다.', 'edit-instructor-weekly-hours'));
         if (record.totalWeeksRaw && record.totalWeeks === null) issues.push(issue('warning', '총주수를 숫자로 해석할 수 없습니다. 미기재 상태로도 증명서 발급은 가능합니다.', 'edit-instructor-total-weeks'));
         if (record.vacationRaw && record.vacationExcluded === null) issues.push(issue('warning', '방학기간 제외 값을 확인해 주세요. 미확인 상태로도 증명서 발급은 가능합니다.', 'edit-instructor-vacation'));
         if (record.appointmentDateRaw && !record.appointmentDate) issues.push(issue('warning', '발령일자를 날짜로 읽을 수 없습니다.'));
@@ -1423,6 +1496,7 @@
     renderRrnControls();
     renderCareers();
     renderPreview();
+    promptFirstMissingWeeklyHours();
   }
 
   function renderCareers() {
@@ -1507,7 +1581,7 @@
           : `${record.position || '직급 미기재'} · ${record.department || '부서 미기재'}`;
       const sublineParts = [];
       if (state.ledgerType === 'instructor') {
-        if (record.weeklyHours !== null) sublineParts.push(`주당 ${formatPlainNumber(record.weeklyHours)}시간`);
+        if (record.weeklyHours !== null) sublineParts.push(`주당 ${formatInstructorWeeklyAmount(record)}`);
         if (record.totalWeeks !== null) sublineParts.push(`총 ${formatPlainNumber(record.totalWeeks)}주`);
       }
       if (record.followUpApplied?.originalEndDate) {
@@ -1627,6 +1701,7 @@
     updateRetirementFromSelection();
     renderCareers();
     renderPreview();
+    if (checked) promptWeeklyHoursIfNeeded(state.records.find(record => record.id === id));
   }
 
   function updateRetirementFromSelection() {
@@ -2401,7 +2476,7 @@
         '생년월일 또는 주민번호': record.rrn || record.birth,
         '임용시작일': record.startDate ? formatDate(record.startDate) : displayRaw(record.startRaw),
         '임용종료일': record.endDate ? formatDate(record.endDate) : displayRaw(record.endRaw),
-        '주당수업시간': record.weeklyHours !== null ? formatPlainNumber(record.weeklyHours) : record.weeklyHoursRaw,
+        '주당수업시간': record.weeklyHoursRaw || (record.weeklyHours !== null ? formatPlainNumber(record.weeklyHours) : ''),
         '총주수': record.totalWeeks !== null ? formatPlainNumber(record.totalWeeks) : record.totalWeeksRaw,
         '방학기간 제외': record.vacationExcluded === true ? '예' : record.vacationExcluded === false ? '아니오' : record.vacationRaw,
         '근무시간': record.workTime,
@@ -2707,6 +2782,18 @@
     return Number.isInteger(number) ? String(number) : String(number).replace(/\.0+$/, '');
   }
 
+  function instructorWeeklyUnit(record) {
+    const raw = text(record?.weeklyHoursRaw);
+    if (/시수/.test(raw)) return '시수';
+    if (/시간/.test(raw)) return '시간';
+    return '시간';
+  }
+
+  function formatInstructorWeeklyAmount(record) {
+    if (!record || record.weeklyHours === null) return '';
+    return `${formatPlainNumber(record.weeklyHours)}${instructorWeeklyUnit(record)}`;
+  }
+
   function normalizeDutyType(value) {
     const normalized = normalizeSearch(value);
     if (normalized === '교과' || normalized.includes('과목')) return '교과';
@@ -2725,7 +2812,7 @@
   function formatInstructorPosition(record) {
     const role = record.roleType || record.position || '시간강사';
     const details = [];
-    if (record.weeklyHours !== null) details.push(`주당${formatPlainNumber(record.weeklyHours)}시간`);
+    if (record.weeklyHours !== null) details.push(`주당${formatInstructorWeeklyAmount(record)}`);
     if (record.totalWeeks !== null) details.push(`총${formatPlainNumber(record.totalWeeks)}주`);
     const base = details.length ? `${role}(${details.join(', ')})` : role;
     return getVacationOption(record).mode === 'excluded' ? `${base}\n방학기간 제외` : base;

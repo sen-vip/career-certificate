@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#0f172a" />
-  <title>경력증명 자동화 v0.6.3</title>
+  <title>경력증명 자동화 v0.6.4</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2216%22 fill=%22%230f172a%22/><path d=%22M18 15h28a4 4 0 0 1 4 4v34H14V19a4 4 0 0 1 4-4Z%22 fill=%22white%22/><path d=%22M22 25h20M22 33h20M22 41h12%22 stroke=%22%234f46e5%22 stroke-width=%224%22 stroke-linecap=%22round%22/></svg>" />
   <link rel="stylesheet" href="styles.css" />
   <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -22,7 +22,7 @@
       </div>
       <div class="header-actions">
         <span class="privacy-badge"><span class="dot"></span>외부 전송 없이 처리</span>
-        <span class="version-badge">v0.6.3</span>
+        <span class="version-badge">v0.6.4</span>
       </div>
     </header>
 
@@ -323,7 +323,7 @@
           <label id="edit-instructor-role-group" hidden>직위구분<select id="edit-instructor-role"><option value="시간강사">시간강사</option><option value="전문강사">전문강사</option></select></label>
           <label id="edit-instructor-duty-type-group" hidden>담당구분 <small>선택사항</small><select id="edit-instructor-duty-type"><option value="">선택 안 함</option><option value="교과">교과</option><option value="프로그램">프로그램</option><option value="부서">부서</option></select></label>
           <label id="edit-instructor-duty-content-group" hidden>담당내용<input id="edit-instructor-duty-content" type="text" /></label>
-          <label id="edit-instructor-weekly-hours-group" hidden>주당수업시간<input id="edit-instructor-weekly-hours" type="text" /></label>
+          <label id="edit-instructor-weekly-hours-group" hidden>주당 수업량 <small>예: 6시간, 8시수</small><input id="edit-instructor-weekly-hours" type="text" placeholder="예: 6시간 또는 8시수" /></label>
           <label id="edit-instructor-total-weeks-group" hidden>총주수<input id="edit-instructor-total-weeks" type="text" /></label>
           <label id="edit-instructor-vacation-group" hidden>방학기간 제외<select id="edit-instructor-vacation"><option value="아니오">아니오</option><option value="예">예</option></select></label>
           <label id="edit-instructor-work-time-group" hidden>근무시간<input id="edit-instructor-work-time" type="text" /></label>
@@ -357,6 +357,27 @@
       <div class="dialog-actions">
         <button class="btn ghost" type="button" data-close-edit-dialog>취소</button>
         <button id="save-record" class="btn primary" value="default" type="submit">수정 저장</button>
+      </div>
+    </form>
+  </dialog>
+
+
+  <dialog id="weekly-hours-dialog" class="edit-dialog weekly-hours-dialog">
+    <form method="dialog" id="weekly-hours-form">
+      <div class="dialog-heading">
+        <div><span class="eyebrow">시간강사 경력 확인</span><h2>주당 수업량이 비어 있습니다</h2></div>
+        <button class="icon-button" type="button" data-close-weekly-hours-dialog aria-label="닫기">×</button>
+      </div>
+      <div class="dialog-body">
+        <input id="weekly-hours-record-id" type="hidden" />
+        <p id="weekly-hours-context" class="weekly-hours-context"></p>
+        <p class="weekly-hours-message">시간강사 경력 확인에 중요한 정보입니다. 학교에 따라 <strong>주당 6시간</strong>, <strong>8시수</strong>처럼 다르게 기재할 수 있어요. 필요하면 지금 입력해 주세요.</p>
+        <label class="weekly-hours-input-label">주당 수업량<input id="weekly-hours-input" type="text" placeholder="예: 6시간 또는 8시수" autocomplete="off" /></label>
+        <p class="field-help">입력하지 않아도 경력증명서 미리보기와 인쇄는 계속할 수 있습니다.</p>
+      </div>
+      <div class="dialog-actions">
+        <button id="weekly-hours-skip" class="btn ghost" type="button">입력 없이 계속</button>
+        <button class="btn primary" type="submit">입력하고 반영</button>
       </div>
     </form>
   </dialog>

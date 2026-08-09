@@ -910,3 +910,12 @@ button.status-pill.actionable:focus-visible {
 .history-entry-fields { margin-top: 11px; }
 .form-grid.three { grid-template-columns: 0.9fr 1.2fr 1.3fr; }
 @media (max-width: 720px) { .form-grid.three { grid-template-columns: 1fr; } }
+
+
+/* v0.6.4: 시간강사 주당 수업량 선택 안내 */
+.weekly-hours-dialog { width: min(560px, calc(100vw - 40px)); }
+.weekly-hours-context { margin: 0 0 10px; font-weight: 800; color: #334155; }
+.weekly-hours-message { margin: 0 0 18px; line-height: 1.65; color: #475569; }
+.weekly-hours-input-label { display: grid; gap: 8px; font-weight: 800; color: #1e293b; }
+.weekly-hours-input-label input { width: 100%; }
+.field-help { margin: 9px 0 0; color: #64748b; font-size: .88rem; line-height: 1.5; }

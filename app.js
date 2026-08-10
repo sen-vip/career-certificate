@@ -21,7 +21,7 @@
     roleType: ['직위구분', '강사구분'],
     dutyType: ['담당구분', '수업구분'],
     dutyContent: ['담당내용', '담당과목프로그램', '담당과목·프로그램', '프로그램명'],
-    weeklyHours: ['주당수업시간', '주당 수업시간', '주당시수', '주당 수업시수'],
+    weeklyHours: ['주당수업시수', '주당 수업시수', '주당시수', '주당 수업시간', '주당수업시간', '주당수업량', '주당 수업량'],
     totalWeeks: ['총주수', '총 주수', '총수업주수'],
     vacationExcluded: ['방학기간 제외', '방학기간제외', '방학 제외'],
     workTime: ['근무시간', '수업시간', '요일교시'],
@@ -65,6 +65,10 @@
   ];
 
   const INSTRUCTOR_ROLE_VALUES = ['시간강사', '전문강사'];
+  // 시간강사 경력행의 수업량 표기는 여기만 바꾸면 전체 출력에 반영됩니다.
+  // 숫자만 입력한 경우 학교 현장에서 흔히 쓰는 '시수'를 기본 단위로 사용하고,
+  // 엑셀에 '시간' 또는 '시수'가 명시된 경우에는 원문 단위를 유지합니다.
+  const INSTRUCTOR_WEEKLY_DISPLAY = { prefix: '주당 ', defaultUnit: '시수' };
   const INSTRUCTOR_DUTY_VALUES = ['교과', '프로그램', '부서'];
   const TERMINATION_EVENT_KEYWORDS = ['의원면직', '면직', '퇴직', '중도퇴직', '계약해지', '해촉', '사직', '사임', '당연퇴직', '해고'];
   const VACATION_TYPE_LABELS = {
@@ -1137,7 +1141,7 @@
     const memo = text(value);
     if (!memo) return '';
     const normalized = memo.replace(/\s+/g, '');
-    const optionalChecks = ['담당구분확인', '담당내용확인', '주당수업시간확인', '총주수확인'];
+    const optionalChecks = ['담당구분확인', '담당내용확인', '주당수업시간확인', '주당수업시수확인', '총주수확인'];
     return optionalChecks.includes(normalized) ? '' : memo;
   }
 
@@ -1352,11 +1356,16 @@
         if (!record.roleType) issues.push(issue('error', '직위구분이 비어 있습니다.', 'edit-instructor-role'));
         else if (!INSTRUCTOR_ROLE_VALUES.includes(record.roleType)) issues.push(issue('error', '직위구분은 시간강사 또는 전문강사로 입력해 주세요.', 'edit-instructor-role'));
 
-        // 시간강사 보조정보는 증명서 발급을 막지 않는다.
         // 담당구분은 선택사항이며, 입력되어 있으면 근무부서 표시 형식을 보조하는 용도로만 사용한다.
+        // 단, '시간강사'는 경력증명서의 경력행에 주당 수업시수를 반드시 표시해야 하므로 필수값으로 검증한다.
         if (!record.dutyContent) issues.push(issue('warning', '담당내용이 비어 있습니다. 필요하면 입력해 주세요.', 'edit-instructor-duty-content'));
-        if (!text(record.weeklyHoursRaw) && record.weeklyHours === null) issues.push(issue('warning', '주당 수업량이 비어 있습니다. 대장 수정에서 입력해 주세요. 예: 6시간, 8시수. 입력하지 않아도 증명서 발급은 가능합니다.', 'edit-instructor-weekly-hours'));
-        if (record.weeklyHoursRaw && record.weeklyHours === null) issues.push(issue('warning', '주당 수업량을 해석할 수 없습니다. 예: 6시간, 8시수. 미기재 상태로도 증명서 발급은 가능합니다.', 'edit-instructor-weekly-hours'));
+        if (isHourlyInstructor(record)) {
+          if (!text(record.weeklyHoursRaw) && record.weeklyHours === null) issues.push(issue('error', '시간강사 경력의 주당 수업시수를 확인해 주세요. 예: 6시수, 8시수, 12시수.', 'edit-instructor-weekly-hours'));
+          else if (record.weeklyHours === null) issues.push(issue('error', '시간강사 경력의 주당 수업시수를 해석할 수 없습니다. 예: 6시수, 8시수, 12시수.', 'edit-instructor-weekly-hours'));
+        } else {
+          if (!text(record.weeklyHoursRaw) && record.weeklyHours === null) issues.push(issue('warning', '주당 수업량이 비어 있습니다. 필요하면 입력해 주세요.', 'edit-instructor-weekly-hours'));
+          else if (record.weeklyHours === null) issues.push(issue('warning', '주당 수업량을 해석할 수 없습니다. 예: 6시간, 8시수.', 'edit-instructor-weekly-hours'));
+        }
         if (record.totalWeeksRaw && record.totalWeeks === null) issues.push(issue('warning', '총주수를 숫자로 해석할 수 없습니다. 미기재 상태로도 증명서 발급은 가능합니다.', 'edit-instructor-total-weeks'));
         if (record.vacationRaw && record.vacationExcluded === null) issues.push(issue('warning', '방학기간 제외 값을 확인해 주세요. 미확인 상태로도 증명서 발급은 가능합니다.', 'edit-instructor-vacation'));
         if (record.appointmentDateRaw && !record.appointmentDate) issues.push(issue('warning', '발령일자를 날짜로 읽을 수 없습니다.'));
@@ -1642,7 +1651,7 @@
           : `${record.position || '직급 미기재'} · ${record.department || '부서 미기재'}`;
       const sublineParts = [];
       if (state.ledgerType === 'instructor') {
-        if (record.weeklyHours !== null) sublineParts.push(`주당 ${formatInstructorWeeklyAmount(record)}`);
+        if (record.weeklyHours !== null) sublineParts.push(formatInstructorWeeklyLabel(record));
         if (record.totalWeeks !== null) sublineParts.push(`총 ${formatPlainNumber(record.totalWeeks)}주`);
       }
       if (record.followUpApplied?.originalEndDate) {
@@ -2363,6 +2372,8 @@
       if (birth && dateToInput(parsedRrn.birth) !== dateToInput(birth)) return { ok: false, message: '주민등록번호 앞 6자리와 생년월일이 일치하지 않습니다.' };
     }
     if (state.certificateMode === 'hours' && selected.some(record => !record.hours)) return { ok: false, message: '선택한 경력 중 소정근로시간이 입력되지 않은 자료가 있습니다.' };
+    const instructorWithoutWeeklyHours = selected.find(record => record.ledgerType === 'instructor' && isHourlyInstructor(record) && record.weeklyHours === null);
+    if (instructorWithoutWeeklyHours) return { ok: false, message: '시간강사 경력의 주당 수업시수를 확인해 주세요.' };
 
     const historySpecs = {
       award: ['포상', ['date', 'type', 'agency']],
@@ -2870,16 +2881,25 @@
     return Number.isInteger(number) ? String(number) : String(number).replace(/\.0+$/, '');
   }
 
+  function isHourlyInstructor(record) {
+    return normalizeSearch(record?.roleType || record?.position) === normalizeSearch('시간강사');
+  }
+
   function instructorWeeklyUnit(record) {
     const raw = text(record?.weeklyHoursRaw);
     if (/시수/.test(raw)) return '시수';
     if (/시간/.test(raw)) return '시간';
-    return '시간';
+    return INSTRUCTOR_WEEKLY_DISPLAY.defaultUnit;
   }
 
   function formatInstructorWeeklyAmount(record) {
     if (!record || record.weeklyHours === null) return '';
     return `${formatPlainNumber(record.weeklyHours)}${instructorWeeklyUnit(record)}`;
+  }
+
+  function formatInstructorWeeklyLabel(record) {
+    const amount = formatInstructorWeeklyAmount(record);
+    return amount ? `${INSTRUCTOR_WEEKLY_DISPLAY.prefix}${amount}` : '';
   }
 
   function normalizeDutyType(value) {
@@ -2909,8 +2929,8 @@
   function formatInstructorPosition(record) {
     const role = record.roleType || record.position || '시간강사';
     const details = [];
-    if (record.weeklyHours !== null) details.push(`주당${formatInstructorWeeklyAmount(record)}`);
-    if (record.totalWeeks !== null) details.push(`총${formatPlainNumber(record.totalWeeks)}주`);
+    if (record.weeklyHours !== null) details.push(formatInstructorWeeklyLabel(record));
+    if (record.totalWeeks !== null) details.push(`총 ${formatPlainNumber(record.totalWeeks)}주`);
     const base = details.length ? `${role}(${details.join(', ')})` : role;
     return getVacationOption(record).mode === 'excluded' ? `${base}\n방학기간 제외` : base;
   }

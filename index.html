@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#0f172a" />
-  <title>경력증명 자동화 v0.7.1</title>
+  <title>경력증명 자동화 v0.7.2</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2216%22 fill=%22%230f172a%22/><path d=%22M18 15h28a4 4 0 0 1 4 4v34H14V19a4 4 0 0 1 4-4Z%22 fill=%22white%22/><path d=%22M22 25h20M22 33h20M22 41h12%22 stroke=%22%234f46e5%22 stroke-width=%224%22 stroke-linecap=%22round%22/></svg>" />
   <link rel="stylesheet" href="styles.css" />
   <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -24,7 +24,7 @@
       <div class="header-actions">
         <span class="privacy-badge"><span class="dot"></span>외부 전송 없이 처리</span>
         <button id="open-help" class="help-button" type="button">도움말</button>
-        <span class="version-badge">v0.7.1</span>
+        <span class="version-badge">v0.7.2</span>
       </div>
     </header>
 
@@ -61,9 +61,9 @@
                 <details class="template-download">
                   <summary class="btn ghost">기본양식 받기</summary>
                   <div class="template-download-menu" role="menu" aria-label="기본양식 다운로드">
-                    <a href="templates/공무직_일용직_발령대장(양식).xlsx?v=0.7.0" download>교육공무직·일용직 경력대장</a>
-                    <a href="templates/기간제교원_발령대장(양식).xlsx?v=0.7.0" download>기간제교원 발령대장</a>
-                    <a href="templates/시간강사_발령대장(양식).xlsx?v=0.7.0" download>시간강사·전문강사 발령대장</a>
+                    <a href="templates/공무직_일용직_발령대장(양식).xlsx?v=0.7.2" download>교육공무직·일용직 경력대장</a>
+                    <a href="templates/기간제교원_발령대장(양식).xlsx?v=0.7.2" download>기간제교원 발령대장</a>
+                    <a href="templates/시간강사_발령대장(양식).xlsx?v=0.7.2" download>시간강사·전문강사 발령대장</a>
                   </div>
                 </details>
                 <button id="clear-data" class="btn ghost" type="button">자료 비우기</button>
@@ -311,12 +311,14 @@
           <section class="help-card">
             <div class="help-card-title"><span class="help-icon">✓</span><h3>점검 상태</h3></div>
             <p><strong class="help-status error">오류</strong> 날짜 오류, 중복·겹침, 미해결 후속발령 등입니다. 해결 전에는 인쇄할 수 없습니다.</p>
-            <p><strong class="help-status warning">확인 필요</strong> 주당 수업량처럼 발급 상황에 따라 생략 가능한 항목입니다. 내용을 확인한 뒤 발급할 수 있습니다.</p>
+            <p><strong class="help-status warning">확인 필요</strong> 담당내용·총주수처럼 발급 상황에 따라 확인이 필요한 항목입니다. 내용을 확인한 뒤 발급할 수 있습니다.</p>
+            <p><strong class="help-status error">시간강사 시수 필수</strong> 시간강사 경력은 주당 수업시수가 없으면 선택·인쇄할 수 없습니다. 경력별 시수를 확인해 주세요.</p>
             <p><strong class="help-status clean">정상</strong> 앱이 확인한 범위에서 발급을 막는 문제가 없는 경력입니다.</p>
           </section>
 
           <section class="help-card">
-            <div class="help-card-title"><span class="help-icon">☀</span><h3>시간강사 방학기간</h3></div>
+            <div class="help-card-title"><span class="help-icon">☀</span><h3>시간강사 시수·방학기간</h3></div>
+            <p>시간강사는 경력마다 <strong>주당 수업시수</strong>가 필요하며 증명서 경력행에 함께 표시됩니다.</p>
             <p><strong>표시 안 함 / 방학기간 제외 / 상세 기간 입력</strong> 중 이번 발급에 필요한 방식을 선택할 수 있습니다.</p>
             <p class="help-note">방학기간은 증명서 문구용입니다. 현재 근무연수 계산에서 방학일수를 자동 차감하지 않습니다.</p>
           </section>
@@ -357,7 +359,7 @@
           <label id="edit-instructor-role-group" hidden>직위구분<select id="edit-instructor-role"><option value="시간강사">시간강사</option><option value="전문강사">전문강사</option></select></label>
           <label id="edit-instructor-duty-type-group" hidden>담당구분 <small>선택사항</small><select id="edit-instructor-duty-type"><option value="">선택 안 함</option><option value="교과">교과</option><option value="프로그램">프로그램</option><option value="부서">부서</option></select></label>
           <label id="edit-instructor-duty-content-group" hidden>담당내용<input id="edit-instructor-duty-content" type="text" /></label>
-          <label id="edit-instructor-weekly-hours-group" hidden>주당 수업량 <small>예: 6시간, 8시수</small><input id="edit-instructor-weekly-hours" type="text" placeholder="예: 6시간 또는 8시수" /></label>
+          <label id="edit-instructor-weekly-hours-group" hidden>주당 수업시수 <small>시간강사 필수 · 예: 6시수, 8시수, 12시수</small><input id="edit-instructor-weekly-hours" type="text" placeholder="예: 8시수" /></label>
           <label id="edit-instructor-total-weeks-group" hidden>총주수<input id="edit-instructor-total-weeks" type="text" /></label>
           <label id="edit-instructor-vacation-group" hidden>방학기간 제외<select id="edit-instructor-vacation"><option value="아니오">아니오</option><option value="예">예</option></select></label>
           <label id="edit-instructor-work-time-group" hidden>근무시간<input id="edit-instructor-work-time" type="text" /></label>

@@ -1201,3 +1201,32 @@ button.status-pill.actionable:focus-visible {
   .help-grid { grid-template-columns: 1fr; }
   .help-actions { padding: 12px 18px; }
 }
+
+
+/* v0.7.3: 경력별 방학기간 귀속을 명확히 표시 */
+.vacation-options-section .field-help strong { color: var(--ink); font-weight: 850; }
+.vacation-option-card { overflow: hidden; padding: 0; }
+.vacation-career-banner {
+  display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 4px 10px;
+  padding: 12px 14px; border-bottom: 1px solid #dfe3ff; background: #f7f8ff;
+}
+.vacation-career-number {
+  grid-row: 1 / span 2; align-self: stretch; display: inline-flex; align-items: center; justify-content: center;
+  min-width: 72px; padding: 7px 9px; border-radius: 9px; background: var(--primary); color: #fff;
+  font-size: 11.5px; font-weight: 900; letter-spacing: -.01em;
+}
+.vacation-career-banner strong { color: var(--ink); font-size: 14px; line-height: 1.35; }
+.vacation-career-banner > span:last-child { color: #667085; font-size: 11.5px; font-weight: 700; }
+.vacation-card-heading { padding: 12px 14px 0; }
+.vacation-mode-grid { margin: 10px 14px 0; }
+.vacation-detail-panel { margin: 11px 14px 14px; }
+.vacation-period-heading strong { color: var(--primary-dark); }
+.vacation-add-help { margin: 6px 2px 0; color: var(--muted); font-size: 10.5px; line-height: 1.45; }
+.vacation-option-card + .vacation-option-card { margin-top: 4px; }
+@media (max-width: 720px) {
+  .vacation-career-banner { grid-template-columns: 1fr; }
+  .vacation-career-number { grid-row: auto; justify-self: start; min-width: 0; }
+  .vacation-mode-grid { margin-left: 12px; margin-right: 12px; }
+  .vacation-card-heading { padding-left: 12px; padding-right: 12px; }
+  .vacation-detail-panel { margin-left: 12px; margin-right: 12px; }
+}

@@ -1818,12 +1818,24 @@
     };
   }
 
+  function getVacationCareerRecords() {
+    return state.ledgerType === 'instructor'
+      ? getSelectedRecords().slice().sort((a, b) => dateValue(a.startDate) - dateValue(b.startDate) || dateValue(a.endDate) - dateValue(b.endDate))
+      : [];
+  }
+
+  function getVacationCareerMeta(record) {
+    const records = getVacationCareerRecords();
+    const index = Math.max(0, records.findIndex(item => item.id === record.id));
+    return { records, index, number: index + 1, total: records.length };
+  }
+
   function renderVacationOptions() {
     const section = $('vacation-options-section');
     const list = $('vacation-options-list');
     if (!section || !list) return;
 
-    const records = state.ledgerType === 'instructor' ? getSelectedRecords() : [];
+    const records = getVacationCareerRecords();
     section.hidden = !records.length;
     if (!records.length) {
       list.innerHTML = '';
@@ -1831,11 +1843,11 @@
     }
 
     records.forEach(ensureVacationOption);
-    list.innerHTML = records.map(record => buildVacationOptionCard(record)).join('');
+    list.innerHTML = records.map((record, index) => buildVacationOptionCard(record, index, records.length)).join('');
     records.forEach(record => updateVacationCardFeedback(record.id));
   }
 
-  function buildVacationOptionCard(record) {
+  function buildVacationOptionCard(record, careerIndex = 0, careerTotal = 1) {
     const option = ensureVacationOption(record);
     const modes = [
       { value: 'none', label: '표시 안 함', description: '방학 관련 문구를 넣지 않음' },
@@ -1848,23 +1860,31 @@
         <span><strong>${mode.label}</strong><small>${mode.description}</small></span>
       </button>`).join('');
 
-    const periods = option.periods.map((period, index) => buildVacationPeriodCard(record, period, index)).join('');
+    const periods = option.periods.map((period, index) => buildVacationPeriodCard(record, period, index, careerIndex)).join('');
     const detailedPanel = option.mode === 'detailed' ? `
       <div class="vacation-detail-panel">
         <div class="vacation-period-list">${periods}</div>
-        <button class="vacation-add-button" data-add-vacation data-record-id="${escapeAttr(record.id)}" type="button">＋ 방학기간 추가</button>
+        <button class="vacation-add-button" data-add-vacation data-record-id="${escapeAttr(record.id)}" type="button">＋ 이 경력에 방학기간 추가</button>
+        <p class="vacation-add-help">여름·겨울·학년말처럼 같은 경력 안에 방학이 여러 번 있을 때만 추가하세요.</p>
         <div class="vacation-card-alert" data-vacation-card-alert role="status" aria-live="polite" hidden></div>
         <div class="vacation-output-preview">
-          <span>증명서 표시 미리보기</span>
+          <span>경력 ${careerIndex + 1} 증명서 표시 미리보기</span>
           <p data-vacation-preview></p>
         </div>
       </div>` : '';
 
+    const weeklyLabel = record.weeklyHours !== null ? formatInstructorWeeklyLabel(record) : '';
+    const metaLine = [record.roleType || '시간강사', record.dutyContent || '담당내용 미기재', weeklyLabel].filter(Boolean).join(' · ');
     return `<article class="vacation-option-card" data-vacation-card="${escapeAttr(record.id)}">
+      <div class="vacation-career-banner">
+        <span class="vacation-career-number">경력 ${careerIndex + 1} / ${careerTotal}</span>
+        <strong>${escapeHtml(formatRecordPeriod(record))}</strong>
+        <span>${escapeHtml(metaLine)}</span>
+      </div>
       <div class="vacation-card-heading">
         <div>
-          <strong>${escapeHtml(formatRecordPeriod(record))}</strong>
-          <span>${escapeHtml(`${record.roleType || '시간강사'} · ${record.dutyContent || '담당내용 미기재'}`)}</span>
+          <strong>이 경력의 방학기간 표시</strong>
+          <span>아래 입력값은 ${escapeHtml(formatRecordPeriod(record))} 경력에만 적용됩니다.</span>
           <span class="vacation-range-help">입력 가능 기간: ${escapeHtml(formatRecordPeriod(record))}</span>
         </div>
         <span class="vacation-source-chip">대장값 ${record.vacationExcluded === true ? '제외' : '미제외'}</span>
@@ -1876,13 +1896,13 @@
     </article>`;
   }
 
-  function buildVacationPeriodCard(record, period, index) {
+  function buildVacationPeriodCard(record, period, index, careerIndex = 0) {
     const startPickerId = `vacation-picker-${record.id}-${period.id}-start`;
     const endPickerId = `vacation-picker-${record.id}-${period.id}-end`;
     return `<section class="vacation-period-card" data-vacation-period-card="${escapeAttr(period.id)}">
       <div class="vacation-period-heading">
-        <strong>방학기간 ${index + 1}</strong>
-        <button class="vacation-remove-button" data-remove-vacation data-record-id="${escapeAttr(record.id)}" data-period-id="${escapeAttr(period.id)}" type="button" aria-label="방학기간 ${index + 1} 삭제">삭제</button>
+        <strong>경력 ${careerIndex + 1}의 방학기간 ${index + 1}</strong>
+        <button class="vacation-remove-button" data-remove-vacation data-record-id="${escapeAttr(record.id)}" data-period-id="${escapeAttr(period.id)}" type="button" aria-label="경력 ${careerIndex + 1}의 방학기간 ${index + 1} 삭제">삭제</button>
       </div>
       ${buildVacationTypeField(record, period)}
       ${buildVacationDateField('시작일', record, period, 'startDate', startPickerId)}
@@ -1930,8 +1950,10 @@
   function analyzeVacationOption(record, option = getVacationOption(record)) {
     if (option.mode !== 'detailed') return { errors: [], validPeriods: [] };
     const errors = [];
+    const careerMeta = getVacationCareerMeta(record);
+    const careerPrefix = `경력 ${careerMeta.number} (${formatRecordPeriod(record)})`;
     if (!option.periods.length) {
-      errors.push({ recordId: record.id, periodId: '', field: '', message: '상세 기간을 한 개 이상 추가해 주세요.' });
+      errors.push({ recordId: record.id, periodId: '', field: '', message: `${careerPrefix}에 상세 방학기간을 한 개 이상 추가해 주세요.` });
       return { errors, validPeriods: [] };
     }
 
@@ -1942,7 +1964,7 @@
       const endRaw = text(period.endDate);
       const start = parseDateStrict(startRaw);
       const end = parseDateStrict(endRaw);
-      const prefix = `방학기간 ${index + 1}`;
+      const prefix = `${careerPrefix}의 방학기간 ${index + 1}`;
       let invalid = false;
 
       if (!startRaw) {
@@ -2219,10 +2241,14 @@
   }
 
   function buildVacationReferenceMap(records) {
-    const detailed = records.filter(record => getPreviewVacationPeriods(record).length);
-    const useReferences = detailed.length > 1 || (detailed.length === 1 && records.length > 1);
+    const detailedIds = new Set(records.filter(record => getPreviewVacationPeriods(record).length).map(record => record.id));
+    const useReferences = detailedIds.size > 1 || (detailedIds.size === 1 && records.length > 1);
     const map = new Map();
-    if (useReferences) detailed.forEach((record, index) => map.set(record.id, `※${index + 1}`));
+    if (useReferences) {
+      records.forEach((record, index) => {
+        if (detailedIds.has(record.id)) map.set(record.id, `※${index + 1}`);
+      });
+    }
     return map;
   }
 

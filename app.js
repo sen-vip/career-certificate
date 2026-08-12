@@ -282,7 +282,7 @@
 
   function bindHelp() {
     const dialog = $('help-dialog');
-    $('open-help')?.addEventListener('click', () => dialog?.showModal());
+    qsa('#open-help, [data-open-help]').forEach(button => button.addEventListener('click', () => dialog?.showModal()));
     qsa('[data-close-help]').forEach(button => button.addEventListener('click', () => dialog?.close()));
     dialog?.addEventListener('click', event => {
       if (event.target === dialog) dialog.close();

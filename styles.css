@@ -944,14 +944,6 @@ button.status-pill.actionable:focus-visible {
 @media (max-width: 720px) { .history-repeat-row { grid-template-columns: 24px minmax(0,1fr); } .history-remove { grid-column: 2; justify-self: end; } }
 
 /* v0.7.1: 안정화 검증 + 도움말 UI 핫픽스 */
-.brand-creator {
-  margin-top: 3px;
-  color: #98a2b3;
-  font-size: 10.5px;
-  line-height: 1.2;
-}
-.brand-creator strong { color: #667085; font-weight: 800; }
-
 .help-button {
   border: 1px solid #d9deea;
   background: #fff;
@@ -1178,16 +1170,7 @@ button.status-pill.actionable:focus-visible {
   background: #fff;
   box-shadow: 0 -8px 20px rgba(15,23,42,.025);
 }
-.help-maker {
-  color: #98a2b3;
-  font-size: 11px;
-}
-.help-maker strong { color: #667085; font-weight: 800; }
 .help-actions .btn { min-width: 78px; padding: 9px 15px; }
-
-@media (max-width: 1099px) {
-  .brand-creator { display: none; }
-}
 
 @media (max-width: 720px) {
   .header-actions { gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
@@ -1229,4 +1212,51 @@ button.status-pill.actionable:focus-visible {
   .vacation-mode-grid { margin-left: 12px; margin-right: 12px; }
   .vacation-card-heading { padding-left: 12px; padding-right: 12px; }
   .vacation-detail-panel { margin-left: 12px; margin-right: 12px; }
+}
+
+
+/* v0.7.4: 제작자 표기를 상단에서 제거하고 서비스 정보로 정리 */
+.site-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 18px 24px 24px;
+  color: #98a2b3;
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+.site-footer-brand { color: #8a94a6; font-weight: 650; }
+.site-footer-separator { color: #c5cad3; }
+.site-footer-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #98a2b3;
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.site-footer-link:hover { color: #667085; text-decoration: underline; text-underline-offset: 2px; }
+
+.help-service-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-top: 1px solid #edf0f5;
+  color: #98a2b3;
+  font-size: 10.5px;
+}
+.help-service-info > span { font-weight: 750; color: #98a2b3; }
+.help-service-info strong { color: #667085; font-weight: 800; }
+.help-service-info a { margin-left: auto; color: #7c8798; text-decoration: none; font-weight: 750; }
+.help-service-info a:hover { color: #475467; text-decoration: underline; text-underline-offset: 2px; }
+.help-actions { justify-content: flex-end; }
+
+@media (max-width: 720px) {
+  .site-footer { padding: 15px 18px 20px; font-size: 10px; }
+  .help-service-info { flex-wrap: wrap; }
+  .help-service-info a { margin-left: 0; }
 }

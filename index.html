@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#0f172a" />
-  <title>경력증명 자동화 v0.7.3</title>
+  <title>경력증명 자동화 v0.7.4</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2216%22 fill=%22%230f172a%22/><path d=%22M18 15h28a4 4 0 0 1 4 4v34H14V19a4 4 0 0 1 4-4Z%22 fill=%22white%22/><path d=%22M22 25h20M22 33h20M22 41h12%22 stroke=%22%234f46e5%22 stroke-width=%224%22 stroke-linecap=%22round%22/></svg>" />
   <link rel="stylesheet" href="styles.css" />
   <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -18,13 +18,12 @@
         <div>
           <div class="brand-title">경력증명 자동화</div>
           <div class="brand-subtitle">대장을 확인하고 증명서를 바로 출력합니다</div>
-          <div class="brand-creator">제작 <strong>senvip(학돌랩)</strong></div>
         </div>
       </div>
       <div class="header-actions">
         <span class="privacy-badge"><span class="dot"></span>외부 전송 없이 처리</span>
         <button id="open-help" class="help-button" type="button">도움말</button>
-        <span class="version-badge">v0.7.3</span>
+        <span class="version-badge">v0.7.4</span>
       </div>
     </header>
 
@@ -61,9 +60,9 @@
                 <details class="template-download">
                   <summary class="btn ghost">기본양식 받기</summary>
                   <div class="template-download-menu" role="menu" aria-label="기본양식 다운로드">
-                    <a href="templates/공무직_일용직_발령대장(양식).xlsx?v=0.7.3" download>교육공무직·일용직 경력대장</a>
-                    <a href="templates/기간제교원_발령대장(양식).xlsx?v=0.7.3" download>기간제교원 발령대장</a>
-                    <a href="templates/시간강사_발령대장(양식).xlsx?v=0.7.3" download>시간강사·전문강사 발령대장</a>
+                    <a href="templates/공무직_일용직_발령대장(양식).xlsx?v=0.7.4" download>교육공무직·일용직 경력대장</a>
+                    <a href="templates/기간제교원_발령대장(양식).xlsx?v=0.7.4" download>기간제교원 발령대장</a>
+                    <a href="templates/시간강사_발령대장(양식).xlsx?v=0.7.4" download>시간강사·전문강사 발령대장</a>
                   </div>
                 </details>
                 <button id="clear-data" class="btn ghost" type="button">자료 비우기</button>
@@ -284,6 +283,14 @@
     </main>
   </div>
 
+  <footer class="site-footer no-print" aria-label="서비스 정보">
+    <span class="site-footer-brand">학돌랩 · senvip</span>
+    <span class="site-footer-separator" aria-hidden="true">·</span>
+    <button class="site-footer-link" type="button" data-open-help>도움말</button>
+    <span class="site-footer-separator" aria-hidden="true">·</span>
+    <a class="site-footer-link" href="https://github.com/sen-vip/career-certificate" target="_blank" rel="noopener noreferrer">GitHub</a>
+  </footer>
+
 
   <dialog id="help-dialog" class="help-dialog">
     <div class="help-shell">
@@ -333,10 +340,15 @@
             <p>업로드한 경력대장과 발급 내용은 서버에 저장하지 않습니다. 공용 PC에서는 발급 후 <strong>자료 비우기</strong>를 눌러 주세요.</p>
           </section>
         </div>
+
+        <section class="help-service-info" aria-label="서비스 정보">
+          <span>서비스 정보</span>
+          <strong>학돌랩 · senvip</strong>
+          <a href="https://github.com/sen-vip/career-certificate" target="_blank" rel="noopener noreferrer">GitHub</a>
+        </section>
       </div>
 
       <div class="dialog-actions help-actions">
-        <span class="help-maker">제작 <strong>senvip(학돌랩)</strong></span>
         <button class="btn primary" type="button" data-close-help>확인</button>
       </div>
     </div>

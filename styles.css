@@ -294,6 +294,33 @@ button { cursor: pointer; }
 .contact-box div:last-child { border-bottom: 0; }
 .contact-box span { border-right: 1px solid #111; height: 100%; display: grid; place-items: center; font-weight: 700; }
 .contact-box strong { padding-left: 3mm; font-weight: 400; }
+
+/* v0.7.6: 10줄 경력증명서 전용 A4 1페이지 맞춤 */
+.certificate--ten-rows {
+  padding-top: 12mm;
+  padding-bottom: 8mm;
+}
+.certificate--ten-rows h1 { margin-bottom: 5mm; }
+.certificate--ten-rows .career-table th,
+.certificate--ten-rows .career-table td {
+  height: 6.4mm;
+  padding-top: 1mm;
+  padding-bottom: 1mm;
+}
+.certificate--ten-rows .career-table tr:first-child th,
+.certificate--ten-rows .career-table tr:nth-child(2) th { height: 7.4mm; }
+.certificate--ten-rows .career-table tr:last-child th,
+.certificate--ten-rows .career-table tr:last-child td { height: 6.8mm; }
+.certificate--ten-rows .certificate-footer {
+  min-height: 0;
+  padding-top: 4mm;
+  padding-bottom: 0;
+}
+.certificate--ten-rows .certify-text { margin-bottom: 4mm; }
+.certificate--ten-rows .issue-date { margin-bottom: 3.5mm; }
+.certificate--ten-rows .school-name { margin-bottom: 4mm; }
+.certificate--ten-rows .contact-box div { min-height: 6.8mm; }
+
 .print-help { text-align: center; color: var(--muted); font-size: 11px; margin: 9px 0 0; }
 
 .appendix-page { padding-top: 18mm; }

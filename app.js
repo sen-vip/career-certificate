@@ -97,6 +97,10 @@
   const $ = id => document.getElementById(id);
   const qsa = selector => [...document.querySelectorAll(selector)];
   let xlsxPromise = null;
+  let xlsxPopulatePromise = null;
+  let pendingProtectedFile = null;
+  let pendingProtectedBuffer = null;
+  let passwordDialogBusy = false;
   let previewResizeObserver = null;
   let previewFitFrame = 0;
   let previewFitScale = 1;
@@ -132,6 +136,7 @@
   function init() {
     bindTabs();
     bindUpload();
+    bindPasswordDialog();
     bindFormFields();
     bindHistoryControls();
     bindBirthInput();
@@ -867,23 +872,226 @@
   }
 
   async function readWorkbook(file) {
+    resetProtectedWorkbookState();
+    clearUploadError();
     try {
       await ensureXlsx();
       const buffer = await file.arrayBuffer();
-      // 날짜 셀을 Date 객체로 만들면 브라우저 시간대에 따라 하루가 앞당겨질 수 있다.
-      // 일련번호 그대로 읽고 parseDateStrict에서 연·월·일만 복원한다.
-      const workbook = XLSX.read(buffer, { type: 'array', cellDates: false, raw: true });
-      const detected = detectWorkbookLayout(workbook);
-      if (!detected) throw new Error('지원하는 대장 형식을 확인할 수 없습니다. 엑셀의 열 제목을 확인해 주세요.');
-      const mapper = detected.type === 'teacher' ? mapTeacherRow : detected.type === 'instructor' ? mapInstructorRow : mapGeneralRow;
-      const rows = detected.rows.map(row => ({ ...mapper(row), __sourceRow: row.__sourceRow }));
-      clearUploadError();
-      loadRows(rows, file.name, detected.type);
-      toast(`${ledgerTypeLabel(detected.type)}으로 인식했습니다.`);
+      let workbook;
+      try {
+        workbook = parseWorkbookBuffer(buffer);
+      } catch (error) {
+        if (isPasswordProtectedError(error)) {
+          pendingProtectedFile = file;
+          pendingProtectedBuffer = buffer;
+          openPasswordDialog(file);
+          return;
+        }
+        throw error;
+      }
+      processWorkbook(workbook, file.name);
     } catch (error) {
-      const message = error?.message || '엑셀을 읽지 못했습니다.';
+      const message = friendlyWorkbookError(error);
       showUploadError(message);
       toast(message, true);
+    }
+  }
+
+  function parseWorkbookBuffer(buffer) {
+    // 날짜 셀을 Date 객체로 만들면 브라우저 시간대에 따라 하루가 앞당겨질 수 있다.
+    // 일련번호 그대로 읽고 parseDateStrict에서 연·월·일만 복원한다.
+    return XLSX.read(buffer, { type: 'array', cellDates: false, raw: true });
+  }
+
+  function processWorkbook(workbook, fileName) {
+    const detected = detectWorkbookLayout(workbook);
+    if (!detected) throw new Error('지원하는 대장 형식을 확인할 수 없습니다. 엑셀의 열 제목을 확인해 주세요.');
+    const mapper = detected.type === 'teacher' ? mapTeacherRow : detected.type === 'instructor' ? mapInstructorRow : mapGeneralRow;
+    const rows = detected.rows.map(row => ({ ...mapper(row), __sourceRow: row.__sourceRow }));
+    clearUploadError();
+    loadRows(rows, fileName, detected.type);
+    toast(`${ledgerTypeLabel(detected.type)}으로 인식했습니다.`);
+  }
+
+  function isPasswordProtectedError(error) {
+    const message = String(error?.message || error || '').toLowerCase();
+    return /password-protected|password protected|password|encrypted|encryption/.test(message);
+  }
+
+  function friendlyWorkbookError(error) {
+    const message = String(error?.message || '').trim();
+    if (/지원하는 대장 형식/.test(message)) return message;
+    if (/인터넷 연결|연결 시간이 초과|기능을 확인/.test(message)) return message;
+    return '파일을 확인한 뒤 다시 시도해 주세요.';
+  }
+
+  function bindPasswordDialog() {
+    const dialog = $('password-dialog');
+    const form = $('password-form');
+    const input = $('workbook-password');
+    const toggle = $('toggle-password');
+    if (!dialog || !form || !input || !toggle) return;
+
+    form.addEventListener('submit', event => {
+      event.preventDefault();
+      unlockProtectedWorkbook();
+    });
+
+    toggle.addEventListener('click', () => {
+      const reveal = input.type === 'password';
+      input.type = reveal ? 'text' : 'password';
+      toggle.textContent = reveal ? '숨기기' : '보기';
+      toggle.setAttribute('aria-label', reveal ? '암호 숨기기' : '암호 표시');
+      input.focus();
+      input.setSelectionRange?.(input.value.length, input.value.length);
+    });
+
+    qsa('[data-close-password]').forEach(button => button.addEventListener('click', () => {
+      if (passwordDialogBusy) return;
+      closePasswordDialog(true);
+    }));
+
+    dialog.addEventListener('cancel', event => {
+      if (passwordDialogBusy) {
+        event.preventDefault();
+        return;
+      }
+      event.preventDefault();
+      closePasswordDialog(true);
+    });
+  }
+
+  function openPasswordDialog(file) {
+    const dialog = $('password-dialog');
+    const input = $('workbook-password');
+    const fileName = $('password-file-name');
+    if (!dialog || !input) {
+      showUploadError('암호가 설정된 Excel 파일입니다. 현재 브라우저에서 암호 입력 창을 열 수 없습니다.');
+      return;
+    }
+    if (fileName) fileName.textContent = file?.name || '';
+    input.value = '';
+    input.type = 'password';
+    const toggle = $('toggle-password');
+    if (toggle) {
+      toggle.textContent = '보기';
+      toggle.setAttribute('aria-label', '암호 표시');
+    }
+    setPasswordStatus('');
+    setPasswordDialogBusy(false);
+    if (!dialog.open) dialog.showModal();
+    window.setTimeout(() => input.focus(), 0);
+  }
+
+  function closePasswordDialog(discardFile = false) {
+    const dialog = $('password-dialog');
+    const input = $('workbook-password');
+    if (input) {
+      input.value = '';
+      input.type = 'password';
+    }
+    setPasswordStatus('');
+    setPasswordDialogBusy(false);
+    if (dialog?.open) dialog.close();
+    if (discardFile) resetProtectedWorkbookState();
+  }
+
+  function resetProtectedWorkbookState() {
+    pendingProtectedFile = null;
+    pendingProtectedBuffer = null;
+  }
+
+  function setPasswordDialogBusy(busy) {
+    passwordDialogBusy = Boolean(busy);
+    const dialog = $('password-dialog');
+    const input = $('workbook-password');
+    const button = $('unlock-workbook');
+    dialog?.classList.toggle('is-busy', passwordDialogBusy);
+    if (input) input.disabled = passwordDialogBusy;
+    if (button) {
+      button.disabled = passwordDialogBusy;
+      button.textContent = passwordDialogBusy ? '대장을 불러오는 중...' : '대장 불러오기';
+    }
+  }
+
+  function setPasswordStatus(message, type = 'error') {
+    const status = $('password-status');
+    if (!status) return;
+    status.textContent = message || '';
+    status.hidden = !message;
+    status.classList.toggle('is-info', type === 'info');
+  }
+
+  async function ensureXlsxPopulate() {
+    if (window.XlsxPopulate) return window.XlsxPopulate;
+    if (xlsxPopulatePromise) return xlsxPopulatePromise;
+    xlsxPopulatePromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/xlsx-populate@1.21.0/browser/xlsx-populate.min.js';
+      script.async = true;
+      script.onload = () => window.XlsxPopulate
+        ? resolve(window.XlsxPopulate)
+        : reject(new Error('암호화 Excel 처리 기능을 확인할 수 없습니다.'));
+      script.onerror = () => reject(new Error('암호화 Excel 처리 기능을 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.'));
+      document.head.appendChild(script);
+      window.setTimeout(() => {
+        if (!window.XlsxPopulate) reject(new Error('암호화 Excel 처리 기능 연결 시간이 초과되었습니다.'));
+      }, 20000);
+    }).catch(error => {
+      xlsxPopulatePromise = null;
+      throw error;
+    });
+    return xlsxPopulatePromise;
+  }
+
+  async function unlockProtectedWorkbook() {
+    const file = pendingProtectedFile;
+    const buffer = pendingProtectedBuffer;
+    const input = $('workbook-password');
+    const password = input?.value || '';
+    if (!file || !buffer) {
+      closePasswordDialog(true);
+      showUploadError('암호화된 파일 정보를 다시 확인할 수 없습니다. 파일을 다시 선택해 주세요.');
+      return;
+    }
+    if (!password) {
+      setPasswordStatus('파일의 암호를 입력해 주세요.');
+      input?.focus();
+      return;
+    }
+
+    setPasswordDialogBusy(true);
+    setPasswordStatus('암호를 확인하고 대장을 불러오는 중입니다.', 'info');
+    try {
+      await ensureXlsx();
+      const XlsxPopulate = await ensureXlsxPopulate();
+      const source = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const unlocked = await XlsxPopulate.fromDataAsync(source, { password });
+      const decryptedBlob = await unlocked.outputAsync();
+      const decryptedBuffer = typeof decryptedBlob.arrayBuffer === 'function'
+        ? await decryptedBlob.arrayBuffer()
+        : await new Response(decryptedBlob).arrayBuffer();
+      const workbook = parseWorkbookBuffer(decryptedBuffer);
+      processWorkbook(workbook, file.name);
+      closePasswordDialog(false);
+      resetProtectedWorkbookState();
+    } catch (error) {
+      const message = String(error?.message || error || '').toLowerCase();
+      const wrongPassword = /password|verify|verification|decrypt|integrity|key/.test(message);
+      setPasswordDialogBusy(false);
+      if (input) {
+        input.value = '';
+        input.focus();
+      }
+      if (wrongPassword) {
+        setPasswordStatus('암호가 올바르지 않습니다. 파일의 암호를 다시 확인해 주세요.');
+      } else if (/인터넷 연결|연결 시간이 초과|기능을 확인/.test(String(error?.message || ''))) {
+        setPasswordStatus(String(error.message));
+      } else {
+        setPasswordStatus('이 Excel 파일의 암호화 방식은 현재 지원하지 않습니다. Excel에서 암호를 해제한 .xlsx 복사본으로 다시 시도해 주세요.');
+      }
+    } finally {
+      // password 변수는 이 함수의 실행이 끝나면 더 이상 보관하지 않는다.
     }
   }
 
@@ -2650,6 +2858,8 @@
     state.selectedRecordIds.clear();
     state.vacationOptions.clear();
     state.warningAcknowledged = false;
+    resetProtectedWorkbookState();
+    closePasswordDialog(false);
     clearUploadError();
     clearIssueFields(true);
     renderAll();

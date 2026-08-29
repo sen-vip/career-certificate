@@ -1260,3 +1260,133 @@ button.status-pill.actionable:focus-visible {
   .help-service-info { flex-wrap: wrap; }
   .help-service-info a { margin-left: 0; }
 }
+
+/* v0.7.5: 암호화 Excel 파일 입력 */
+.password-dialog {
+  width: min(520px, calc(100vw - 32px));
+  max-height: min(680px, calc(100vh - 32px));
+  border: 0;
+  border-radius: 22px;
+  padding: 0;
+  overflow: hidden;
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 30px 90px rgba(15, 23, 42, .30);
+}
+.password-dialog::backdrop {
+  background: rgba(15, 23, 42, .50);
+  backdrop-filter: blur(4px);
+}
+.password-shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  max-height: min(680px, calc(100vh - 32px));
+  overflow: hidden;
+}
+.password-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  background: linear-gradient(180deg, #fbfbff 0%, #fff 100%);
+}
+.password-heading-copy { display: flex; align-items: flex-start; gap: 13px; min-width: 0; }
+.password-lock {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #dfe3f6;
+  border-radius: 13px;
+  background: #f4f5ff;
+  font-size: 18px;
+}
+.password-heading h2 { margin: 4px 0 0; font-size: 19px; letter-spacing: -.035em; }
+.password-file-name {
+  max-width: 360px;
+  margin: 6px 0 0;
+  color: #667085;
+  font-size: 11.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.password-body { padding-top: 22px; }
+.password-field { display: grid; gap: 8px; color: #344054; font-size: 12px; font-weight: 800; }
+.password-input-wrap { position: relative; display: block; }
+.password-input-wrap input {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 68px 10px 13px;
+  border: 1px solid #d0d5dd;
+  border-radius: 11px;
+  background: #fff;
+  color: #101828;
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+  transition: .15s ease;
+}
+.password-input-wrap input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, .12);
+}
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  transform: translateY(-50%);
+  min-width: 50px;
+  height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: #f2f4f7;
+  color: #475467;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.password-toggle:hover { background: #eaecf0; color: #344054; }
+.password-status {
+  margin-top: 11px;
+  padding: 10px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fff7f7;
+  color: #991b1b;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.5;
+}
+.password-status[hidden] { display: none; }
+.password-status.is-info { border-color: #d9defc; background: #f7f7ff; color: #4338ca; }
+.password-privacy-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 15px;
+  padding: 12px 13px;
+  border: 1px solid #d9f2df;
+  border-radius: 12px;
+  background: #fbfefc;
+  color: #475467;
+}
+.password-privacy-note > span { color: #15803d; font-weight: 900; }
+.password-privacy-note p { margin: 0; font-size: 11.5px; line-height: 1.55; }
+.password-privacy-note strong { color: #166534; }
+.password-actions { justify-content: flex-end; }
+.password-actions .btn { min-width: 92px; }
+.password-dialog.is-busy .password-toggle,
+.password-dialog.is-busy [data-close-password] { pointer-events: none; opacity: .55; }
+
+@media (max-width: 560px) {
+  .password-dialog { width: calc(100vw - 18px); max-height: calc(100vh - 18px); border-radius: 18px; }
+  .password-shell { max-height: calc(100vh - 18px); }
+  .password-heading { padding: 18px 18px 15px; }
+  .password-heading-copy { gap: 10px; }
+  .password-lock { width: 38px; height: 38px; border-radius: 11px; }
+  .password-heading h2 { font-size: 17px; }
+  .password-body { padding: 18px; }
+  .password-actions { padding: 13px 18px; }
+}

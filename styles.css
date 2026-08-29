@@ -1081,24 +1081,47 @@ button.status-pill.actionable:focus-visible {
 }
 .help-button:hover { background: #f8fafc; border-color: #cfd5df; color: #344054; }
 
-/* v0.7.13: 상단바 액션의 역할별 시각 위계 */
-.header-clear-button {
+/* v0.7.14: 대장/작성내용 액션을 미리보기 작업바에서 역할별로 분리 */
+.preview-data-clear {
   border: 0;
   background: transparent;
   color: #667085;
   border-radius: 9px;
-  padding: 7px 9px;
+  padding: 8px 8px;
   font: inherit;
   font-size: 12px;
-  font-weight: 750;
+  font-weight: 780;
   cursor: pointer;
   transition: background .15s ease, color .15s ease;
 }
-.header-clear-button:hover { background: #fff1f0; color: #b42318; }
-.header-clear-button:focus-visible, .help-button:focus-visible {
+.preview-data-clear:hover { background: #fff1f0; color: #b42318; }
+.preview-data-clear:focus-visible, .help-button:focus-visible {
   outline: 3px solid rgba(79,70,229,.14);
   outline-offset: 2px;
 }
+.preview-action-divider { width: 1px; height: 24px; background: #e4e7ec; margin: 0 1px; }
+
+.clear-data-dialog {
+  width: min(430px, calc(100vw - 32px));
+  border: 0;
+  border-radius: 19px;
+  padding: 0;
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 28px 70px rgba(15,23,42,.28);
+}
+.clear-data-dialog::backdrop { background: rgba(15,23,42,.42); backdrop-filter: blur(2px); }
+.clear-data-dialog form { padding: 24px; }
+.clear-data-dialog-icon {
+  width: 38px; height: 38px; display: grid; place-items: center;
+  margin-bottom: 14px; border-radius: 12px; background: #fff4f2; color: #b42318;
+  font-size: 20px; font-weight: 900;
+}
+.clear-data-dialog-copy h2 { margin: 0; font-size: 18px; letter-spacing: -.025em; }
+.clear-data-dialog-copy p { margin: 9px 0 0; color: #667085; font-size: 12.5px; line-height: 1.65; }
+.clear-data-dialog-actions { margin-top: 22px; }
+.btn.danger { background: #b42318; color: #fff; box-shadow: 0 6px 14px rgba(180,35,24,.16); }
+.btn.danger:hover { background: #912018; }
 
 .upload-error {
   margin-top: 12px;
@@ -1316,7 +1339,7 @@ button.status-pill.actionable:focus-visible {
 
 @media (max-width: 720px) {
   .header-actions { gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
-  .header-clear-button, .help-button { padding: 6px 8px; }
+  .help-button { padding: 6px 8px; }
   .version-meta { display: none; }
   .help-dialog { width: calc(100vw - 18px); max-height: calc(100vh - 18px); border-radius: 19px; }
   .help-shell { max-height: calc(100vh - 18px); }
@@ -1532,4 +1555,13 @@ button.status-pill.actionable:focus-visible {
   .password-heading h2 { font-size: 17px; }
   .password-body { padding: 18px; }
   .password-actions { padding: 13px 18px; }
+}
+
+
+@media (max-width: 720px) {
+  .preview-actions { gap: 7px; }
+  .preview-data-clear { flex: 0 0 auto !important; padding-left: 7px; padding-right: 7px; }
+  .preview-action-divider { display: none; }
+  .clear-data-dialog form { padding: 21px 19px 18px; }
+  .clear-data-dialog-actions .btn { flex: 1; }
 }

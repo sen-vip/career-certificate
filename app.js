@@ -334,7 +334,14 @@
       const details = document.querySelector('.template-download');
       if (details?.open && !details.contains(event.target)) details.open = false;
     });
-    $('clear-data').addEventListener('click', clearData);
+    $('clear-data').addEventListener('click', openClearDataDialog);
+    $('confirm-clear-data').addEventListener('click', () => {
+      clearData();
+      $('clear-data-dialog')?.close();
+    });
+    $('clear-data-dialog')?.addEventListener('click', event => {
+      if (event.target === $('clear-data-dialog')) $('clear-data-dialog').close();
+    });
   }
 
   function bindFormFields() {
@@ -1688,8 +1695,11 @@
   }
 
   function renderUploadState() {
+    const hasLedger = Boolean(state.records.length);
     const clearButton = $('clear-data');
-    if (clearButton) clearButton.hidden = !state.records.length;
+    const actionDivider = $('preview-action-divider');
+    if (clearButton) clearButton.hidden = !hasLedger;
+    if (actionDivider) actionDivider.hidden = !hasLedger;
     if (!state.records.length) {
       els.fileState.textContent = '대장 없음';
       els.fileState.className = 'state-chip';
@@ -2768,7 +2778,7 @@
       printWindow.addEventListener('afterprint', cleanUp, { once: true });
       printWindow.focus();
       printWindow.print();
-      toast('공용 PC에서는 발급 후 ‘자료 비우기’를 눌러 주세요.');
+      toast('공용 PC에서는 발급 후 ‘대장 비우기’를 눌러 주세요.');
       window.setTimeout(cleanUp, 3000);
     }, 300);
   }
@@ -2939,6 +2949,13 @@
     XLSX.utils.book_append_sheet(workbook, sheet, sheetName);
     XLSX.writeFile(workbook, `${filePrefix}_${dateToInput(new Date()).replaceAll('-', '')}.xlsx`);
     toast('수정 대장을 내려받았습니다.');
+  }
+
+  function openClearDataDialog() {
+    if (!state.records.length) return;
+    const dialog = $('clear-data-dialog');
+    if (!dialog) return clearData();
+    if (!dialog.open) dialog.showModal();
   }
 
   function clearData() {

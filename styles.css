@@ -270,7 +270,8 @@ button { cursor: pointer; }
 .career-table tr:first-child th, .career-table tr:nth-child(2) th { height: 8.8mm; }
 .career-table tr:last-child th, .career-table tr:last-child td { height: 8mm; }
 .summary-table { margin-bottom: -1px; }
-.summary-table th:nth-child(1) { width: 22mm; }
+/* v0.7.12: 근무연한/퇴직사유는 12mm 구분열이 아니라 기존 22mm 요약 라벨 폭을 유지 */
+.summary-table .summary-label { width: 22mm; min-width: 22mm; max-width: 22mm; white-space: nowrap; }
 .summary-table th:nth-child(5) { width: 39mm; }
 .history-table { margin-bottom: 0; }
 .history-table td, .history-table th { height: 8mm; padding: 1.5mm 1mm; }

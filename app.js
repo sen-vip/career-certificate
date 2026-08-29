@@ -2583,8 +2583,8 @@
       ${buildMainCareerTable(firstPageRecords, capacity, total, selected.length, referenceMap)}
       ${buildVacationNoteSection(firstPageRecords, referenceMap)}
       <table class="certificate-table summary-table"><tbody>
-        <tr><th class="section-label">근무연한</th><td colspan="3">${selected.length ? escapeHtml(formatDuration(total)) : ''}</td><th>최종직위 또는 직급</th><td colspan="3">${escapeHtml(finalPosition || '')}</td></tr>
-        <tr><th class="section-label">퇴직사유</th><td colspan="7">${escapeHtml($('field-retirement').value.trim())}</td></tr>
+        <tr><th class="summary-label">근무연한</th><td colspan="3">${selected.length ? escapeHtml(formatDuration(total)) : ''}</td><th>최종직위 또는 직급</th><td colspan="3">${escapeHtml(finalPosition || '')}</td></tr>
+        <tr><th class="summary-label">퇴직사유</th><td colspan="7">${escapeHtml($('field-retirement').value.trim())}</td></tr>
       </tbody></table>
       ${buildHistoryTable(history)}
       </div>

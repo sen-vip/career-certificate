@@ -105,8 +105,8 @@
   let previewResizeObserver = null;
   let previewFitFrame = 0;
   let previewFitScale = 1;
-  let previewScale = 1;
-  let previewZoomMode = 'fit-width';
+  let previewScale = 0.75;
+  let previewZoomMode = 'custom';
   const PREVIEW_MIN_SCALE = 0.25;
   const PREVIEW_MAX_SCALE = 2;
   let toastTimer;

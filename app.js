@@ -104,6 +104,7 @@
   let passwordFailureCount = 0;
   let previewResizeObserver = null;
   let previewFitFrame = 0;
+  let certificateFitFrame = 0;
   let previewFitScale = 1;
   let previewScale = 0.75;
   let previewZoomMode = 'custom';
@@ -178,7 +179,7 @@
       qsa('.tab').forEach(tab => tab.classList.toggle('is-active', tab === button));
       qsa('.tab-panel').forEach(panel => panel.classList.remove('is-active'));
       $(`tab-${button.dataset.tab}`).classList.add('is-active');
-      if (button.dataset.tab === 'issue') schedulePreviewFit();
+      if (button.dataset.tab === 'issue') scheduleCertificatePageFit();
     }));
   }
 
@@ -2435,7 +2436,44 @@
       blockMessage.textContent = printStatus.ok ? '발급 준비가 완료되었습니다.' : printStatus.message;
       blockMessage.classList.toggle('ready', printStatus.ok);
     }
-    schedulePreviewFit();
+    scheduleCertificatePageFit();
+  }
+
+  function scheduleCertificatePageFit() {
+    window.cancelAnimationFrame(certificateFitFrame);
+    certificateFitFrame = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        fitMainCertificateToA4();
+        schedulePreviewFit();
+      });
+    });
+  }
+
+  function fitMainCertificateToA4() {
+    const page = $('certificate-pages')?.querySelector('.certificate--main');
+    if (!page || !page.clientHeight) return;
+
+    const levels = ['', 'certificate--compact-1', 'certificate--compact-2'];
+    page.classList.remove('certificate--compact-1', 'certificate--compact-2');
+    page.removeAttribute('data-a4-fit');
+
+    let applied = 'normal';
+    for (let index = 0; index < levels.length; index += 1) {
+      if (index > 0) page.classList.add(levels[index]);
+      // Reading these values forces layout after each compact class change.
+      const overflow = page.scrollHeight - page.clientHeight;
+      if (overflow <= 1) {
+        applied = index === 0 ? 'normal' : `compact-${index}`;
+        page.dataset.a4Fit = applied;
+        return;
+      }
+      if (index > 0 && index < levels.length - 1) page.classList.remove(levels[index]);
+    }
+
+    page.dataset.a4Fit = 'compact-2-overflow';
+    console.warn('[경력증명 자동화] A4 자동 맞춤 2단계 이후에도 내용 높이가 페이지를 초과합니다.', {
+      overflow: page.scrollHeight - page.clientHeight
+    });
   }
 
   function deriveMainCareerCapacity(selected) {
@@ -2496,7 +2534,7 @@
     ) : '';
     const history = getHistoryPreviewValues();
     const firstPageRecords = selected.slice(0, capacity);
-    return `<article class="certificate${capacity === 10 ? ' certificate--ten-rows' : ''}" aria-label="경력증명서">
+    return `<article class="certificate certificate--main" aria-label="경력증명서">
       <h1>경 력 증 명 서</h1>
       <table class="certificate-table identity-table">
         <colgroup>
@@ -2666,6 +2704,7 @@
   }
 
   function printCertificateOnly() {
+    fitMainCertificateToA4();
     const pages = $('certificate-pages');
     if (!pages?.children.length) return toast('인쇄할 증명서를 찾지 못했습니다.', true);
 

@@ -1688,6 +1688,8 @@
   }
 
   function renderUploadState() {
+    const clearButton = $('clear-data');
+    if (clearButton) clearButton.hidden = !state.records.length;
     if (!state.records.length) {
       els.fileState.textContent = '대장 없음';
       els.fileState.className = 'state-chip';

@@ -40,12 +40,21 @@ button { cursor: pointer; }
 .brand-title { font-weight: 800; font-size: 17px; letter-spacing: -0.02em; }
 .brand-subtitle { margin-top: 3px; color: var(--muted); font-size: 12px; }
 .header-actions { display: flex; gap: 9px; align-items: center; }
-.privacy-badge, .version-badge, .state-chip, .count-badge, .type-badge {
+.privacy-badge, .state-chip, .count-badge, .type-badge {
   display: inline-flex; align-items: center; gap: 7px; border-radius: 999px; white-space: nowrap;
 }
 .privacy-badge { padding: 8px 12px; background: var(--success-soft); color: var(--success); font-size: 12px; font-weight: 700; }
 .privacy-badge .dot { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; }
-.version-badge { padding: 7px 10px; background: #111827; color: #fff; font-size: 11px; font-weight: 800; }
+.version-meta {
+  color: #98a2b3;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .01em;
+  padding: 0 2px;
+}
 
 .tabs {
   height: 54px; display: flex; gap: 4px; align-items: end; padding: 0 30px;
@@ -550,7 +559,7 @@ body { font-size: 15px; line-height: 1.5; }
 .brand-title { font-size: 18px; }
 .brand-subtitle { font-size: 13px; }
 .privacy-badge { font-size: 13px; }
-.version-badge { font-size: 12px; }
+.version-meta { font-size: 11px; }
 .tab { font-size: 15px; }
 .panel-heading h2 { font-size: 19px; line-height: 1.35; }
 .eyebrow { font-size: 12px; }
@@ -1070,7 +1079,26 @@ button.status-pill.actionable:focus-visible {
   cursor: pointer;
   transition: .15s ease;
 }
-.help-button:hover { background: #f8fafc; border-color: #b8c0d0; color: #344054; }
+.help-button:hover { background: #f8fafc; border-color: #cfd5df; color: #344054; }
+
+/* v0.7.13: 상단바 액션의 역할별 시각 위계 */
+.header-clear-button {
+  border: 0;
+  background: transparent;
+  color: #667085;
+  border-radius: 9px;
+  padding: 7px 9px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.header-clear-button:hover { background: #fff1f0; color: #b42318; }
+.header-clear-button:focus-visible, .help-button:focus-visible {
+  outline: 3px solid rgba(79,70,229,.14);
+  outline-offset: 2px;
+}
 
 .upload-error {
   margin-top: 12px;
@@ -1287,8 +1315,9 @@ button.status-pill.actionable:focus-visible {
 .help-actions .btn { min-width: 78px; padding: 9px 15px; }
 
 @media (max-width: 720px) {
-  .header-actions { gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
-  .help-button { padding: 6px 9px; }
+  .header-actions { gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
+  .header-clear-button, .help-button { padding: 6px 8px; }
+  .version-meta { display: none; }
   .help-dialog { width: calc(100vw - 18px); max-height: calc(100vh - 18px); border-radius: 19px; }
   .help-shell { max-height: calc(100vh - 18px); }
   .help-heading { padding: 20px 19px 16px; }

@@ -2498,10 +2498,19 @@
     const firstPageRecords = selected.slice(0, capacity);
     return `<article class="certificate${capacity === 10 ? ' certificate--ten-rows' : ''}" aria-label="경력증명서">
       <h1>경 력 증 명 서</h1>
-      <table class="certificate-table identity-table"><tbody>
-        <tr><th rowspan="2" class="section-label">인적<br />사항</th><th>성명</th><td colspan="3">${escapeHtml($('field-name').value.trim())}</td><th>${identifier.label}</th><td colspan="2">${escapeHtml(identifier.value)}</td></tr>
-        <tr><th>주소</th><td colspan="6">${escapeHtml($('field-address').value.trim())}</td></tr>
-      </tbody></table>
+      <table class="certificate-table identity-table">
+        <colgroup>
+          <col class="identity-col-section" />
+          <col class="identity-col-label" />
+          <col /><col /><col />
+          <col class="identity-col-identifier" />
+          <col /><col />
+        </colgroup>
+        <tbody>
+          <tr><th rowspan="2" class="section-label">인적<br />사항</th><th>성명</th><td colspan="3">${escapeHtml($('field-name').value.trim())}</td><th>${identifier.label}</th><td colspan="2">${escapeHtml(identifier.value)}</td></tr>
+          <tr><th>주소</th><td colspan="6">${escapeHtml($('field-address').value.trim())}</td></tr>
+        </tbody>
+      </table>
       ${buildMainCareerTable(firstPageRecords, capacity, total, selected.length, referenceMap)}
       ${buildVacationNoteSection(firstPageRecords, referenceMap)}
       <table class="certificate-table summary-table"><tbody>

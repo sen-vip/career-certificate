@@ -2453,26 +2453,56 @@
     const page = $('certificate-pages')?.querySelector('.certificate--main');
     if (!page || !page.clientHeight) return;
 
+    const body = page.querySelector('.certificate-body');
+    const footer = page.querySelector('.certificate-footer');
+    if (!body || !footer) return;
+
     const levels = ['', 'certificate--compact-1', 'certificate--compact-2'];
     page.classList.remove('certificate--compact-1', 'certificate--compact-2');
     page.removeAttribute('data-a4-fit');
+    page.removeAttribute('data-footer-gap');
+    footer.style.marginTop = '0px';
 
-    let applied = 'normal';
+    const measure = () => {
+      const style = window.getComputedStyle(page);
+      const paddingTop = Number.parseFloat(style.paddingTop) || 0;
+      const paddingBottom = Number.parseFloat(style.paddingBottom) || 0;
+      const innerHeight = page.clientHeight - paddingTop - paddingBottom;
+      // offsetHeight는 미리보기 transform(기본 75%)의 영향을 받지 않는다.
+      const bodyHeight = body.offsetHeight;
+      const footerHeight = footer.offsetHeight;
+      return {
+        innerHeight,
+        bodyHeight,
+        footerHeight,
+        remaining: innerHeight - bodyHeight - footerHeight
+      };
+    };
+
     for (let index = 0; index < levels.length; index += 1) {
       if (index > 0) page.classList.add(levels[index]);
-      // Reading these values forces layout after each compact class change.
-      const overflow = page.scrollHeight - page.clientHeight;
-      if (overflow <= 1) {
-        applied = index === 0 ? 'normal' : `compact-${index}`;
+      footer.style.marginTop = '0px';
+
+      // 각 compact 단계의 실제 본문/발급영역 높이를 다시 계산한다.
+      const metrics = measure();
+      if (metrics.remaining >= -1) {
+        const footerGap = Math.max(0, metrics.remaining);
+        footer.style.marginTop = `${footerGap}px`;
+        const applied = index === 0 ? 'normal' : `compact-${index}`;
         page.dataset.a4Fit = applied;
+        page.dataset.footerGap = footerGap.toFixed(1);
         return;
       }
+
       if (index > 0 && index < levels.length - 1) page.classList.remove(levels[index]);
     }
 
+    footer.style.marginTop = '0px';
     page.dataset.a4Fit = 'compact-2-overflow';
+    page.dataset.footerGap = '0';
+    const metrics = measure();
     console.warn('[경력증명 자동화] A4 자동 맞춤 2단계 이후에도 내용 높이가 페이지를 초과합니다.', {
-      overflow: page.scrollHeight - page.clientHeight
+      overflow: Math.max(0, -metrics.remaining)
     });
   }
 
@@ -2535,6 +2565,7 @@
     const history = getHistoryPreviewValues();
     const firstPageRecords = selected.slice(0, capacity);
     return `<article class="certificate certificate--main" aria-label="경력증명서">
+      <div class="certificate-body">
       <h1>경 력 증 명 서</h1>
       <table class="certificate-table identity-table">
         <colgroup>
@@ -2556,6 +2587,7 @@
         <tr><th class="section-label">퇴직사유</th><td colspan="7">${escapeHtml($('field-retirement').value.trim())}</td></tr>
       </tbody></table>
       ${buildHistoryTable(history)}
+      </div>
       <div class="certificate-footer">
         <p class="certify-text">위와 같이 경력을 증명합니다.</p>
         <p class="issue-date">${formatIssueDate(issueDate)}</p>

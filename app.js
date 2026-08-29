@@ -101,6 +101,7 @@
   let pendingProtectedFile = null;
   let pendingProtectedBuffer = null;
   let passwordDialogBusy = false;
+  let passwordFailureCount = 0;
   let previewResizeObserver = null;
   let previewFitFrame = 0;
   let previewFitScale = 1;
@@ -977,6 +978,7 @@
       toggle.textContent = '보기';
       toggle.setAttribute('aria-label', '암호 표시');
     }
+    passwordFailureCount = 0;
     setPasswordStatus('');
     setPasswordDialogBusy(false);
     if (!dialog.open) dialog.showModal();
@@ -999,6 +1001,7 @@
   function resetProtectedWorkbookState() {
     pendingProtectedFile = null;
     pendingProtectedBuffer = null;
+    passwordFailureCount = 0;
   }
 
   function setPasswordDialogBusy(busy) {
@@ -1076,19 +1079,29 @@
       closePasswordDialog(false);
       resetProtectedWorkbookState();
     } catch (error) {
-      const message = String(error?.message || error || '').toLowerCase();
-      const wrongPassword = /password|verify|verification|decrypt|integrity|key/.test(message);
+      const rawMessage = String(error?.message || error || '');
+      const message = rawMessage.toLowerCase();
+      const loaderError = /인터넷 연결|연결 시간이 초과|기능을 확인/.test(rawMessage);
+      const explicitlyUnsupported = /(?:unsupported|not supported|not implemented).*(?:encryption|cipher|algorithm|method|scheme)|(?:encryption|cipher|algorithm|method|scheme).*(?:unsupported|not supported|not implemented)|unknown encryption (?:algorithm|method|scheme)/.test(message);
+
       setPasswordDialogBusy(false);
       if (input) {
         input.value = '';
         input.focus();
       }
-      if (wrongPassword) {
-        setPasswordStatus('암호가 올바르지 않습니다. 파일의 암호를 다시 확인해 주세요.');
-      } else if (/인터넷 연결|연결 시간이 초과|기능을 확인/.test(String(error?.message || ''))) {
-        setPasswordStatus(String(error.message));
-      } else {
+
+      if (loaderError) {
+        setPasswordStatus(rawMessage);
+      } else if (explicitlyUnsupported) {
         setPasswordStatus('이 Excel 파일의 암호화 방식은 현재 지원하지 않습니다. Excel에서 암호를 해제한 .xlsx 복사본으로 다시 시도해 주세요.');
+      } else {
+        passwordFailureCount += 1;
+        console.warn('[암호화 Excel] 파일 열기 실패:', rawMessage);
+        if (passwordFailureCount <= 2) {
+          setPasswordStatus('암호가 올바르지 않습니다. 파일의 암호를 다시 확인해 주세요.');
+        } else {
+          setPasswordStatus('파일을 열지 못했습니다. 암호를 다시 확인해 주세요. 계속 열리지 않는 경우 이 파일의 암호화 방식이 지원되지 않을 수 있습니다.');
+        }
       }
     } finally {
       // password 변수는 이 함수의 실행이 끝나면 더 이상 보관하지 않는다.

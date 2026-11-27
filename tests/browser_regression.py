@@ -1,10 +1,13 @@
 import os
+from io import BytesIO
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 from playwright.sync_api import expect, sync_playwright
 from openpyxl import load_workbook
+import msoffcrypto
+from msoffcrypto.exceptions import InvalidKeyError
 
 script_dir = Path(__file__).resolve().parent
 root = Path(os.environ.get('CAREER_QA_OUTPUT') or tempfile.mkdtemp(prefix='career-certificate-qa-')).resolve()
@@ -117,7 +120,7 @@ with sync_playwright() as pw:
     expect(loc('#print-certificate')).to_be_enabled()
     loc('#field-address').fill('가상주소')
     loc('#field-purpose').fill('가상용도')
-    loc('#field-issue-date').fill('2023-05-01')
+    loc('#field-issue-date').fill('2025-05-01')
     if loc('.history-fields').get_attribute('open') is None:
         loc('.history-fields summary').click()
     for kind, field in [('award','type'),('discipline','type'),('suspension','reason')]:
@@ -133,7 +136,7 @@ with sync_playwright() as pw:
     select('시험나')
     expect(loc('#field-address')).to_have_value('')
     expect(loc('#field-purpose')).to_have_value('제출용')
-    assert loc('#field-issue-date').input_value() != '2023-05-01'
+    assert loc('#field-issue-date').input_value() != '2025-05-01'
     expect(loc('[data-history-field=date]')).to_have_count(0)
     expect(loc('#certificate-pages')).not_to_contain_text('가상주소')
     report('대상 변경 시 입력 초기화·성명과 생년월일 일치·상벌 필수 일자')
@@ -224,6 +227,20 @@ with sync_playwright() as pw:
     encrypted = root / 'exported-protected.xlsx'
     event.value.save_as(encrypted)
     assert encrypted.read_bytes()[:8].hex() == 'd0cf11e0a1b11ae1'
+    with encrypted.open('rb') as source:
+        office = msoffcrypto.OfficeFile(source)
+        try:
+            office.load_key(password='qa-only', verify_password=True)
+        except InvalidKeyError:
+            pass
+        else:
+            raise AssertionError('The original password still opens the new encrypted workbook')
+        office.load_key(password='qa-new', verify_password=True)
+        decoded = BytesIO()
+        office.decrypt(decoded, verify_integrity=True)
+        decoded.seek(0)
+        independently_opened = load_workbook(decoded)
+        assert independently_opened.active['D2'].value == '가상수정직종'
     loc('[data-tab=issue]').click()
     upload('exported-protected')
     loc('#workbook-password').fill('qa-new')

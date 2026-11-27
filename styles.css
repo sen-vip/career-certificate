@@ -517,16 +517,6 @@ button { cursor: pointer; }
   .preview-actions { margin-left: 0; }
 }
 
-@media print {
-  @page { size: A4 portrait; margin: 0; }
-  html, body { width: 210mm; min-width: 0; margin: 0; padding: 0; background: white; }
-  .no-print, .topbar, .tabs, .workspace, .preview-toolbar, .print-help { display: none !important; }
-  .tab-panel, #tab-issue, .issue-layout, .preview-column, .paper-wrap, #print-area, .preview-stage, .certificate-pages { display: block !important; position: static !important; margin: 0 !important; padding: 0 !important; width: 210mm !important; height: auto !important; min-height: 0 !important; max-height: none !important; background: white !important; box-shadow: none !important; overflow: visible !important; }
-  .certificate-pages { transform: none !important; }
-  .certificate { width: 210mm !important; height: 297mm !important; min-height: 297mm !important; box-shadow: none !important; margin: 0 !important; break-after: page; page-break-after: always; }
-  .certificate:last-child { break-after: auto; page-break-after: auto; }
-}
-
 /* v0.3: 기본양식 다운로드 및 시간강사 표시 */
 .type-badge.instructor { background: #f3e8ff; color: #7e22ce; }
 .template-download { position: relative; }

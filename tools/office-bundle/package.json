@@ -1,0 +1,13 @@
+{
+  "name": "career-office-bundle",
+  "private": true,
+  "scripts": {
+    "build": "browserify entry.cjs --standalone XlsxPopulate | terser -c -m --comments '/@license|@preserve|^!/' -o ../../vendor/xlsx-populate.min.js"
+  },
+  "dependencies": {
+    "browserify": "17.0.1",
+    "jszip": "3.10.1",
+    "terser": "5.44.1",
+    "xlsx-populate": "1.21.0"
+  }
+}

@@ -98,6 +98,7 @@
   const $ = id => document.getElementById(id);
   const qsa = selector => [...document.querySelectorAll(selector)];
   let uploadSequence = 0;
+  let printRevision = 0;
   let xlsxPopulatePromise = null;
   let pendingProtectedFile = null;
   let pendingProtectedBuffer = null;
@@ -739,10 +740,7 @@
     bindEditableDateField('edit-end', 'edit-end-picker');
     qsa('[data-close-edit-dialog]').forEach(button => button.addEventListener('click', () => els.editDialog.close()));
     els.editDialog.addEventListener('close', () => {
-      document.body.classList.remove('dialog-open');
-      clearEditFieldErrors();
-      els.editForm.reset();
-      els.editIssues.replaceChildren();
+      if (!els.editDialog.open) resetEditDialog();
     });
 
     els.editForm.addEventListener('submit', event => {
@@ -798,6 +796,16 @@
         updated.payType = $('edit-pay-type').value.trim();
         updated.hours = $('edit-hours').value.trim();
         updated.subject = '';
+      }
+
+      if (updated.followUpStatus === 'pending') {
+        if (updated.startDate && updated.endDate && updated.endDate >= updated.startDate) {
+          updated.recordKind = 'career';
+          updated.followUpStatus = 'standalone';
+          updated.followUpCandidateId = '';
+        } else {
+          updated.followUpDate = updated.startDate || updated.endDate || updated.appointmentDate;
+        }
       }
 
       const automaticRetirement = $('field-retirement').value === getAutomaticRetirement();
@@ -1027,6 +1035,7 @@
 
   function closePasswordDialog(discardFile = false) {
     const dialog = $('password-dialog');
+    $('password-file-name').textContent = '';
     const input = $('workbook-password');
     if (input) {
       input.value = '';
@@ -1070,7 +1079,7 @@
     if (xlsxPopulatePromise) return xlsxPopulatePromise;
     xlsxPopulatePromise = new Promise((resolve, reject) => {
       const script = document.createElement('script');
-      script.src = 'vendor/xlsx-populate.min.js';
+      script.src = 'vendor/xlsx-populate.min.js?v=0.7.17';
       script.async = true;
       script.onload = () => window.XlsxPopulate
         ? resolve(window.XlsxPopulate)
@@ -1109,12 +1118,7 @@
     try {
       ensureXlsx();
       const XlsxPopulate = await ensureXlsxPopulate();
-      const source = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const unlocked = await XlsxPopulate.fromDataAsync(source, { password });
-      const decryptedBlob = await unlocked.outputAsync();
-      const decryptedBuffer = typeof decryptedBlob.arrayBuffer === 'function'
-        ? await decryptedBlob.arrayBuffer()
-        : await new Response(decryptedBlob).arrayBuffer();
+      const decryptedBuffer = await XlsxPopulate.decryptXlsxAsync(buffer, password);
       if (request !== uploadSequence) return;
       const workbook = parseWorkbookBuffer(decryptedBuffer);
       try {
@@ -1171,14 +1175,18 @@
   function detectWorkbookLayout(workbook) {
     const date1904 = Boolean(workbook.Workbook?.WBProps?.date1904);
     const mappers = { general: mapGeneralRow, teacher: mapTeacherRow, instructor: mapInstructorRow };
-    return workbook.SheetNames.flatMap(sheetName => {
+    return workbook.SheetNames.flatMap((sheetName, sheetIndex) => {
+      if (workbook.Workbook?.Sheets?.[sheetIndex]?.Hidden) return [];
       const sheet = workbook.Sheets[sheetName];
       if (!sheet?.['!ref']) return [];
       const firstRow = XLSX.utils.decode_range(sheet['!ref']).s.r + 1;
       const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true, blankrows: true });
       let best = null;
-      for (let rowIndex = 0; rowIndex < Math.min(matrix.length, 14); rowIndex += 1) {
+      let populatedRows = 0;
+      for (let rowIndex = 0; rowIndex < matrix.length && populatedRows < 14; rowIndex += 1) {
         const headers = matrix[rowIndex].map(value => text(value));
+        if (!headers.some(Boolean)) continue;
+        populatedRows += 1;
         const normalized = headers.map(normalizeHeader);
         const thresholds = { instructor: 12, teacher: 10, general: 7 };
         const candidates = Object.entries(thresholds).map(([type, minimum]) => {
@@ -1313,6 +1321,8 @@
     uploadSequence += 1;
     closePasswordDialog(true);
     clearUploadError();
+    resetEditDialog();
+    qsa('iframe[title="경력증명서 인쇄"]').forEach(frame => frame.remove());
     els.personSearch.value = '';
     els.ledgerSearch.value = '';
     els.issueFilter.selectedIndex = 0;
@@ -1358,7 +1368,7 @@
     const singleBoundaryDate = hasSingleBoundaryDate ? (startDate || endDate) : null;
     const singleBoundaryField = hasSingleBoundaryDate ? (startDate ? 'start' : 'end') : '';
     const followUpDate = singleBoundaryDate || ((!startDate && !endDate) ? appointmentDate : null);
-    const isFollowUpEvent = Boolean(followUpDate && terminationText);
+    const isFollowUpEvent = Boolean(terminationText && !(startDate && endDate));
     const possibleFollowUpDate = !isFollowUpEvent && singleBoundaryDate ? singleBoundaryDate : null;
 
     return {
@@ -1443,33 +1453,25 @@
     return '';
   }
 
-  function findFollowUpCandidates(eventRecord, followUpDate) {
-    if (!eventRecord?.birth || !followUpDate || !eventRecord.name) return [];
-    return state.records.filter(record => {
-      if (record.recordKind !== 'career' || record.id === eventRecord.id || record.name !== eventRecord.name) return false;
-      if (record.followUpStatus === 'linked') return false;
-      if (eventRecord.birth !== record.birth) return false;
-      if (eventRecord.rrn && record.rrn && eventRecord.rrn !== record.rrn) return false;
-      if (!record.startDate || !record.endDate) return false;
-      return followUpDate >= record.startDate && followUpDate <= record.endDate;
-    }).sort((a, b) => {
-      const spanA = dateValue(a.endDate) - dateValue(a.startDate);
-      const spanB = dateValue(b.endDate) - dateValue(b.startDate);
-      if (spanA !== spanB) return spanA - spanB;
-      return dateValue(b.startDate) - dateValue(a.startDate);
-    });
+  function isRelatedToFollowUp(record, eventRecord) {
+    if (record.recordKind !== 'career' || !record.startDate || !record.endDate) return false;
+    if (record.rrn && eventRecord.rrn) {
+      if (record.rrn !== eventRecord.rrn) return false;
+    } else if (!eventRecord.name || record.name !== eventRecord.name
+      || (eventRecord.birth && record.birth && eventRecord.birth !== record.birth)) {
+      return false;
+    }
+    const date = eventRecord.followUpDate;
+    return !date || (date >= record.startDate && date <= record.endDate);
   }
 
-  function chooseFollowUpCandidate(eventRecord, candidates) {
-    if (candidates.length === 1) return candidates[0];
-    if (candidates.length > 1) {
-      const exactIdentity = candidates.filter(record =>
-        (eventRecord.rrn && record.rrn && eventRecord.rrn === record.rrn)
-        || (eventRecord.birth && record.birth && eventRecord.birth === record.birth)
-      );
-      if (exactIdentity.length === 1) return exactIdentity[0];
-    }
-    return null;
+  function findFollowUpCandidates(eventRecord, followUpDate) {
+    if (!eventRecord.birth || !followUpDate || !eventRecord.name) return [];
+    const datedEvent = { ...eventRecord, followUpDate };
+    return state.records.filter(record =>
+      record.name === eventRecord.name && record.birth === eventRecord.birth
+      && record.followUpStatus !== 'linked' && isRelatedToFollowUp(record, datedEvent)
+    );
   }
 
   function refreshFollowUpCandidates() {
@@ -1484,8 +1486,7 @@
       if (record.recordKind === 'followup' || record.followUpStatus === 'standalone') return;
       if (!record.possibleFollowUpDate || !record.name) return;
       const candidates = findFollowUpCandidates(record, record.possibleFollowUpDate);
-      const target = chooseFollowUpCandidate(record, candidates);
-      if (!target) return;
+      if (!candidates.length) return;
 
       record.recordKind = 'followup';
       record.followUpStatus = 'pending';
@@ -1493,14 +1494,12 @@
       record.followUpText = '';
       record.followUpReasonRequired = true;
       record.followUpDetectedBy = 'single-date';
-      record.followUpCandidateId = target.id;
     });
 
     const pendingEvents = state.records.filter(record => record.recordKind === 'followup' && record.followUpStatus === 'pending' && record.followUpDate && record.name);
     pendingEvents.forEach(eventRecord => {
       const candidates = findFollowUpCandidates(eventRecord, eventRecord.followUpDate);
-      const target = chooseFollowUpCandidate(eventRecord, candidates);
-      if (target) eventRecord.followUpCandidateId = target.id;
+      if (candidates.length === 1) eventRecord.followUpCandidateId = candidates[0].id;
     });
   }
 
@@ -1566,6 +1565,12 @@
   function keepFollowUpStandalone(eventId) {
     const eventRecord = state.records.find(record => record.id === eventId);
     if (!eventRecord) return;
+    if (eventRecord.followUpDetectedBy !== 'single-date' || !eventRecord.followUpCandidateId) {
+      const index = state.records.indexOf(eventRecord);
+      const field = eventRecord.startDate ? 'edit-end' : 'edit-start';
+      openEditDialog(index, field);
+      return;
+    }
     eventRecord.followUpStatus = 'standalone';
     eventRecord.recordKind = 'career';
     eventRecord.followUpCandidateId = '';
@@ -1574,7 +1579,7 @@
     const index = state.records.indexOf(eventRecord);
     const focusField = eventRecord.startDate && !eventRecord.endDate ? 'edit-end' : (!eventRecord.startDate && eventRecord.endDate ? 'edit-start' : 'edit-end');
     toast(eventRecord.followUpDetectedBy === 'single-date' ? '퇴직 발령 아님으로 두었습니다. 빠진 근무기간을 확인해 주세요.' : '후속 발령을 별도 행으로 두었습니다. 필요한 정보를 확인해 주세요.');
-    if (index >= 0) window.setTimeout(() => openEditDialog(index, focusField), 80);
+    if (index >= 0) openEditDialog(index, focusField);
   }
 
   function undoAppliedFollowUp(recordId) {
@@ -1700,6 +1705,16 @@
       if (rrns.size > 1) records.forEach(record => record.issues.push(issue('error', '같은 대상자에게 서로 다른 주민등록번호가 입력되어 있습니다.', 'edit-id-value')));
     });
 
+    const allPersonGroups = groupRecordsByPerson(state.records);
+    for (const [key, records] of Object.entries(allPersonGroups)) {
+      const names = new Set(records.map(record => record.name).filter(Boolean));
+      const conflict = key.startsWith('rrn|') && names.size > 1;
+      records.forEach(record => {
+        record.identityNameConflict = conflict;
+        if (conflict) record.issues.push(issue('error', '같은 주민등록번호에 서로 다른 성명이 있습니다. 원 대장을 확인해 주세요.', 'edit-name'));
+      });
+    }
+
     const identityGroups = groupBy(state.records.filter(record => record.name && record.birth), record => `${record.name}|${record.birth}`);
     Object.values(identityGroups).forEach(records => {
       const rrns = new Set(records.map(record => record.rrn).filter(Boolean));
@@ -1727,6 +1742,7 @@
         name: records[0].name,
         birth: records.find(record => record.birth)?.birth || '',
         rrn: records.find(record => record.rrn)?.rrn || '',
+        identityNameConflict: records.some(record => record.identityNameConflict),
         records: visibleRecords,
         pendingEvents: pendingEvents.sort((a, b) => dateValue(a.followUpDate) - dateValue(b.followUpDate)),
         errorCount: issueRecords.reduce((sum, record) => sum + record.issues.filter(item => item.level === 'error').length, 0),
@@ -1775,6 +1791,7 @@
       els.fileState.textContent = '대장 없음';
       els.fileState.className = 'state-chip';
       els.uploadSummary.hidden = true;
+      els.uploadSummary.replaceChildren();
       return;
     }
     const errors = countIssues('error');
@@ -1889,6 +1906,7 @@
       els.careerList.className = 'career-list empty-state small';
       els.careerList.innerHTML = '<p>선택한 사람의 경력이 이곳에 표시됩니다.</p>';
       els.careerAlert.hidden = true;
+      els.careerAlert.replaceChildren();
       renderVacationOptions();
       return;
     }
@@ -1896,7 +1914,10 @@
     els.careerTitle.textContent = `${person.name}${person.birth ? `(${formatDate(parseDateStrict(person.birth))})` : ''}님의 등록 경력 ${person.records.length}건`;
     els.careerList.className = 'career-list';
 
-    const followUpHtml = (person.pendingEvents || []).map(eventRecord => {
+    const relatedEvents = getPendingFollowUpEvents().filter(eventRecord =>
+      person.pendingEvents.includes(eventRecord) || person.records.some(record => isRelatedToFollowUp(record, eventRecord))
+    );
+    const followUpHtml = relatedEvents.map(eventRecord => {
       const target = state.records.find(record => record.id === eventRecord.followUpCandidateId);
       const dateLabel = eventRecord.followUpDate ? formatDateNatural(eventRecord.followUpDate) : '발령일 확인 필요';
       const isInferred = eventRecord.followUpDetectedBy === 'single-date' || eventRecord.followUpReasonRequired;
@@ -1906,7 +1927,7 @@
             <span class="status-pill error">후속 발령 확인</span>
             <strong>${escapeHtml(`${dateLabel} · ${eventRecord.followUpText || (isInferred ? '퇴직 발령 여부 확인 필요' : '발령사항 확인 필요')}`)}</strong>
           </div>
-          <p>${isInferred ? '근무기간 한쪽에만 날짜가 있습니다. 퇴직 발령일 수 있으나 연결할 기존 경력을 찾지 못했습니다.' : '퇴직·면직 발령으로 보이지만 연결할 기존 경력을 찾지 못했습니다.'}</p>
+          <p>${isInferred ? '근무기간 한쪽에만 날짜가 있습니다. 연결할 경력을 특정할 수 없습니다.' : '퇴직·면직 발령과 연결할 경력을 특정할 수 없습니다.'}</p>
           <div class="followup-actions">
             <button class="btn small ghost" data-standalone-followup="${escapeAttr(eventRecord.id)}" type="button">직접 확인하기</button>
           </div>
@@ -1944,7 +1965,7 @@
         ${reasonSelect}
         <div class="followup-actions">
           <button class="btn small primary" data-apply-followup="${escapeAttr(eventRecord.id)}" type="button" ${isInferred && !eventRecord.followUpText ? 'disabled' : ''}>${isInferred ? '이전 경력의 퇴직으로 반영' : '경력에 반영'}</button>
-          <button class="btn small ghost" data-standalone-followup="${escapeAttr(eventRecord.id)}" type="button">${isInferred ? '퇴직 발령 아님' : '별도 발령으로 두기'}</button>
+          <button class="btn small ghost" data-standalone-followup="${escapeAttr(eventRecord.id)}" type="button">${isInferred ? '퇴직 발령 아님' : '직접 확인하기'}</button>
         </div>
       </div>`;
     }).join('');
@@ -2009,6 +2030,7 @@
 
     if (!applicantNeedsBirth && !notices.length) {
       els.careerAlert.hidden = true;
+      els.careerAlert.replaceChildren();
       return;
     }
 
@@ -2504,6 +2526,7 @@
   }
 
   function renderPreview() {
+    printRevision += 1;
     const selected = getSelectedRecords().sort((a, b) => dateValue(a.startDate) - dateValue(b.startDate));
     const capacity = deriveMainCareerCapacity(selected);
     const appendixCapacity = deriveAppendixCapacity(selected.slice(capacity));
@@ -2787,14 +2810,23 @@
   }
 
   function getPrintBlockingStatus() {
+    const person = getSelectedPerson();
+    if (person?.identityNameConflict) return { ok: false, message: '같은 주민등록번호에 서로 다른 성명이 있습니다. 원 대장을 확인해 주세요.' };
     const selected = getSelectedRecords();
     if (!selected.length) return { ok: false, message: '발급할 정상 경력을 한 건 이상 선택해 주세요.' };
-    const person = getSelectedPerson();
     const birth = parseBirthDateInput($('field-birth').value);
     if (!person || $('field-name').value.trim() !== person.name) return { ok: false, message: '발급 성명이 선택한 대상자와 일치해야 합니다. 수정은 대장 점검에서 진행해 주세요.' };
     if (!birth) return { ok: false, message: '생년월일을 확인해 주세요.' };
     if (person.birth && dateToInput(birth) !== person.birth) return { ok: false, message: '발급 생년월일이 선택한 대상자와 일치해야 합니다.' };
-    if (!parseDateStrict($('field-issue-date').value)) return { ok: false, message: '발급일을 확인해 주세요.' };
+    const issueDate = parseDateStrict($('field-issue-date').value);
+    if (!issueDate) return { ok: false, message: '발급일을 확인해 주세요.' };
+    const futureRecord = selected.find(record => record.endDate > issueDate);
+    if (futureRecord) {
+      const boundary = futureRecord.startDate > issueDate
+        ? `시작일 ${formatDate(futureRecord.startDate)}`
+        : `종료일 ${formatDate(futureRecord.endDate)}`;
+      return { ok: false, message: `선택 경력의 ${boundary}이 발급일 ${formatDate(issueDate)} 이후입니다. 해당 경력을 선택 해제하거나 원 대장과 발급일을 확인해 주세요.` };
+    }
     if (state.rrnDisplay) {
       const rawRrn = $('field-rrn').value.trim();
       const parsedRrn = parseIdentity(rawRrn);
@@ -2820,10 +2852,12 @@
       }
     }
 
-    const unresolvedFollowUp = getPendingFollowUpEvents().find(eventRecord => eventRecord.followUpCandidateId && state.selectedRecordIds.has(eventRecord.followUpCandidateId));
+    const unresolvedFollowUp = getPendingFollowUpEvents().find(eventRecord =>
+      selected.some(record => isRelatedToFollowUp(record, eventRecord))
+    );
     if (unresolvedFollowUp) {
       const dateLabel = unresolvedFollowUp.followUpDate ? formatDateNatural(unresolvedFollowUp.followUpDate) : '날짜 미확인';
-      return { ok: false, message: `${dateLabel} 퇴직 발령 가능성을 먼저 확인해 주세요.`, followUpId: unresolvedFollowUp.id };
+      return { ok: false, message: `${dateLabel} 후속 퇴직발령과 연결할 경력을 먼저 확인해 주세요.`, followUpId: unresolvedFollowUp.id };
     }
 
     if ($('certificate-pages').querySelector('[data-a4-fit$="overflow"]')) {
@@ -2862,13 +2896,18 @@
     printFrame.setAttribute('title', '경력증명서 인쇄');
     printFrame.setAttribute('aria-hidden', 'true');
     Object.assign(printFrame.style, { position: 'fixed', right: '0', bottom: '0', width: '0', height: '0', border: '0', visibility: 'hidden' });
-    const stylesheetUrl = new URL('styles.css', document.baseURI).href;
+    const stylesheetUrl = document.querySelector('link[rel="stylesheet"]').href;
     printFrame.srcdoc = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title></title><link rel="stylesheet" href="${stylesheetUrl}"><style>
       @page{size:A4 portrait;margin:0}html,body{width:210mm!important;min-width:0!important;margin:0!important;padding:0!important;background:#fff!important;overflow:visible!important}.certificate-pages{display:block!important;position:static!important;left:auto!important;top:auto!important;width:210mm!important;height:auto!important;transform:none!important}.certificate{display:block!important;width:210mm!important;height:297mm!important;min-height:297mm!important;margin:0!important;box-shadow:none!important;break-after:page!important;page-break-after:always!important}.certificate:last-child{break-after:auto!important;page-break-after:auto!important}
     </style></head><body>${pages.outerHTML}</body></html>`;
 
     const cleanUp = () => window.setTimeout(() => printFrame.remove(), 300);
+    const revision = printRevision;
     printFrame.addEventListener('load', () => {
+      if (!printFrame.isConnected || revision !== printRevision) {
+        printFrame.remove();
+        return;
+      }
       const printWindow = printFrame.contentWindow;
       if (!printWindow) return cleanUp();
       printWindow.addEventListener('afterprint', cleanUp, { once: true });
@@ -2878,6 +2917,16 @@
       window.setTimeout(cleanUp, 3000);
     }, { once: true });
     document.body.appendChild(printFrame);
+  }
+
+  function resetEditDialog() {
+    if (els.editDialog.open) els.editDialog.close();
+    document.body.classList.remove('dialog-open');
+    clearEditFieldErrors();
+    els.editForm.reset();
+    $('edit-index').value = '';
+    els.editIssues.replaceChildren();
+    els.editIssues.hidden = true;
   }
 
   function openEditDialog(index, focusFieldId = '') {
@@ -2923,7 +2972,11 @@
       || record.issues.find(item => item.level === 'error')
       || record.issues[0];
     const targetField = focusFieldId || targetIssue?.field || '';
-    if (targetField) window.setTimeout(() => focusEditField(targetField, targetIssue?.message || ''), 80);
+    if (targetField) window.setTimeout(() => {
+      if (els.editDialog.open && Number($('edit-index').value) === index) {
+        focusEditField(targetField, targetIssue?.message || '');
+      }
+    }, 80);
   }
 
   function refreshEditIssues(record) {
@@ -3102,8 +3155,7 @@
     resetProtectedWorkbookState();
     closePasswordDialog(false);
     clearUploadError();
-    els.editForm.reset();
-    els.editIssues.replaceChildren();
+    resetEditDialog();
     $('export-password-dialog').close();
     qsa('iframe[title="경력증명서 인쇄"]').forEach(frame => frame.remove());
     clearIssueFields(true);

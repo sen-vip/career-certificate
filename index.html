@@ -4,13 +4,18 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#0f172a" />
-  <title>경력증명 자동화 v0.7.16</title>
+  <title>경력증명 자동화 v0.7.17</title>
   <link rel="icon" type="image/png" href="./favicon.png" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=0.7.17" />
+  <style media="print">
+    body.interactive-app > :not(.browser-print-notice) { display: none !important; }
+    body.interactive-app > .browser-print-notice { display: block !important; }
+  </style>
   <script defer src="vendor/xlsx.full.min.js"></script>
   <script defer src="app.js?v=0.7.16"></script>
 </head>
-<body>
+<body class="interactive-app">
+  <p class="browser-print-notice" hidden>증명서 인쇄 버튼을 이용해 주세요.</p>
   <div class="app-shell">
     <header class="topbar no-print">
       <div class="brand-wrap">
@@ -23,7 +28,7 @@
       <div class="header-actions">
         <span class="privacy-badge" title="업로드한 자료는 현재 브라우저 안에서만 처리됩니다."><span class="dot"></span>외부 전송 없이 처리</span>
         <button id="open-help" class="help-button" type="button">도움말</button>
-        <span class="version-meta" aria-label="현재 버전 v0.7.16">v0.7.16</span>
+        <span class="version-meta" aria-label="현재 버전 v0.7.17">v0.7.17</span>
       </div>
     </header>
 

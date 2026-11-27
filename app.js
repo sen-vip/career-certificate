@@ -86,6 +86,7 @@
     selectedRecordIds: new Set(),
     historyEntries: { award: [], discipline: [], suspension: [] },
     fileName: '',
+    protectedWorkbook: false,
     ledgerType: 'none',
     certificateMode: 'general',
     rrnDisplay: false,
@@ -96,7 +97,7 @@
 
   const $ = id => document.getElementById(id);
   const qsa = selector => [...document.querySelectorAll(selector)];
-  let xlsxPromise = null;
+  let uploadSequence = 0;
   let xlsxPopulatePromise = null;
   let pendingProtectedFile = null;
   let pendingProtectedBuffer = null;
@@ -154,24 +155,10 @@
     setToday();
     applySettingsToInputs();
     renderAll();
-    ensureXlsx().catch(() => {});
   }
 
   function ensureXlsx() {
-    if (window.XLSX) return Promise.resolve(window.XLSX);
-    if (xlsxPromise) return xlsxPromise;
-    xlsxPromise = new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
-      script.async = true;
-      script.onload = () => window.XLSX ? resolve(window.XLSX) : reject(new Error('엑셀 읽기 기능을 확인할 수 없습니다.'));
-      script.onerror = () => reject(new Error('엑셀 읽기 기능을 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.'));
-      document.head.appendChild(script);
-      window.setTimeout(() => {
-        if (!window.XLSX) reject(new Error('엑셀 읽기 기능 연결 시간이 초과되었습니다.'));
-      }, 15000);
-    });
-    return xlsxPromise;
+    if (!window.XLSX) throw new Error('엑셀 읽기 기능을 확인할 수 없습니다. 페이지를 다시 열어 주세요.');
   }
 
   function bindTabs() {
@@ -524,6 +511,7 @@
 
     qsa('[data-rrn-display]').forEach(button => button.addEventListener('click', () => {
       state.rrnDisplay = button.dataset.rrnDisplay === 'yes';
+      if (!state.rrnDisplay) clearRrnInput();
       if (state.rrnDisplay && !$('field-rrn').value.trim()) syncRrnInputFromSelectedPerson();
       renderRrnControls();
       renderPreview();
@@ -715,7 +703,35 @@
   function bindLedger() {
     els.ledgerSearch.addEventListener('input', renderLedger);
     els.issueFilter.addEventListener('change', renderLedger);
-    $('export-ledger').addEventListener('click', exportLedger);
+    $('export-ledger').addEventListener('click', () => {
+      if (state.protectedWorkbook) $('export-password-dialog').showModal();
+      else exportLedger();
+    });
+    const dialog = $('export-password-dialog');
+    $('cancel-export-password').addEventListener('click', () => dialog.close());
+    const form = $('export-password-form');
+    const passwordInput = $('export-password');
+    const confirmation = $('export-password-confirm');
+    const submit = $('export-password-submit');
+    form.addEventListener('input', () => confirmation.setCustomValidity(''));
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      if (submit.disabled) return;
+      if (!passwordInput.value.trim() || passwordInput.value !== confirmation.value) {
+        confirmation.setCustomValidity('공백이 아닌 암호를 입력하고 확인란에 같은 암호를 입력해 주세요.');
+        confirmation.reportValidity();
+        return;
+      }
+      const password = passwordInput.value;
+      form.reset();
+      submit.disabled = true;
+      if (await exportLedger(password)) dialog.close();
+      submit.disabled = false;
+    });
+    dialog.addEventListener('close', () => {
+      form.reset();
+      confirmation.setCustomValidity('');
+    });
   }
 
   function bindEditDialog() {
@@ -725,6 +741,8 @@
     els.editDialog.addEventListener('close', () => {
       document.body.classList.remove('dialog-open');
       clearEditFieldErrors();
+      els.editForm.reset();
+      els.editIssues.replaceChildren();
     });
 
     els.editForm.addEventListener('submit', event => {
@@ -782,8 +800,18 @@
         updated.subject = '';
       }
 
+      const automaticRetirement = $('field-retirement').value === getAutomaticRetirement();
+      const selectedPerson = getSelectedPerson();
+      if (selectedPerson?.records.some(record => record.id === current.id)
+        && (current.name !== updated.name || current.birth !== updated.birth || current.rrn !== updated.rrn)) {
+        state.selectedPersonKey = null;
+        state.selectedRecordIds.clear();
+        state.vacationOptions.clear();
+        clearIssueFields(true);
+      }
       state.records[index] = updated;
       analyzeRecords();
+      if (automaticRetirement) updateRetirementFromSelection();
       state.rrnDisplay = false;
       clearRrnInput();
       renderAll();
@@ -881,11 +909,13 @@
   }
 
   async function readWorkbook(file) {
-    resetProtectedWorkbookState();
+    const request = ++uploadSequence;
+    closePasswordDialog(true);
     clearUploadError();
     try {
-      await ensureXlsx();
+      ensureXlsx();
       const buffer = await file.arrayBuffer();
+      if (request !== uploadSequence) return;
       let workbook;
       try {
         workbook = parseWorkbookBuffer(buffer);
@@ -900,6 +930,7 @@
       }
       processWorkbook(workbook, file.name);
     } catch (error) {
+      if (request !== uploadSequence) return;
       const message = friendlyWorkbookError(error);
       showUploadError(message);
       toast(message, true);
@@ -912,14 +943,15 @@
     return XLSX.read(buffer, { type: 'array', cellDates: false, raw: true });
   }
 
-  function processWorkbook(workbook, fileName) {
+  function processWorkbook(workbook, fileName, protectedWorkbook = false) {
     const detected = detectWorkbookLayout(workbook);
-    if (!detected) throw new Error('지원하는 대장 형식을 확인할 수 없습니다. 엑셀의 열 제목을 확인해 주세요.');
-    const mapper = detected.type === 'teacher' ? mapTeacherRow : detected.type === 'instructor' ? mapInstructorRow : mapGeneralRow;
-    const rows = detected.rows.map(row => ({ ...mapper(row), __sourceRow: row.__sourceRow }));
-    clearUploadError();
-    loadRows(rows, fileName, detected.type);
-    toast(`${ledgerTypeLabel(detected.type)}으로 인식했습니다.`);
+    if (!detected.length) throw new Error('지원하는 대장 형식 또는 불러올 경력이 없습니다. 열 제목과 경력 내용을 확인해 주세요.');
+    const types = new Set(detected.map(layout => layout.type));
+    if (types.size !== 1) throw new Error('여러 종류의 경력대장이 한 파일에 있습니다. 같은 종류끼리 파일을 나누어 불러와 주세요.');
+    const [type] = types;
+    const rows = detected.flatMap(layout => layout.rows);
+    loadRows(rows, fileName, type, protectedWorkbook);
+    toast(`${ledgerTypeLabel(type)}으로 인식했습니다. ${detected.length}개 시트의 경력을 불러왔습니다.`);
   }
 
   function isPasswordProtectedError(error) {
@@ -929,7 +961,7 @@
 
   function friendlyWorkbookError(error) {
     const message = String(error?.message || '').trim();
-    if (/지원하는 대장 형식/.test(message)) return message;
+    if (/지원하는 대장 형식|여러 종류의 경력대장/.test(message)) return message;
     if (/인터넷 연결|연결 시간이 초과|기능을 확인/.test(message)) return message;
     return '파일을 확인한 뒤 다시 시도해 주세요.';
   }
@@ -1038,12 +1070,12 @@
     if (xlsxPopulatePromise) return xlsxPopulatePromise;
     xlsxPopulatePromise = new Promise((resolve, reject) => {
       const script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/xlsx-populate@1.21.0/browser/xlsx-populate.min.js';
+      script.src = 'vendor/xlsx-populate.min.js';
       script.async = true;
       script.onload = () => window.XlsxPopulate
         ? resolve(window.XlsxPopulate)
         : reject(new Error('암호화 Excel 처리 기능을 확인할 수 없습니다.'));
-      script.onerror = () => reject(new Error('암호화 Excel 처리 기능을 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.'));
+      script.onerror = () => reject(new Error('암호화 Excel 처리 기능을 확인할 수 없습니다. 페이지를 다시 열어 주세요.'));
       document.head.appendChild(script);
       window.setTimeout(() => {
         if (!window.XlsxPopulate) reject(new Error('암호화 Excel 처리 기능 연결 시간이 초과되었습니다.'));
@@ -1056,6 +1088,7 @@
   }
 
   async function unlockProtectedWorkbook() {
+    const request = uploadSequence;
     const file = pendingProtectedFile;
     const buffer = pendingProtectedBuffer;
     const input = $('workbook-password');
@@ -1074,7 +1107,7 @@
     setPasswordDialogBusy(true);
     setPasswordStatus('암호를 확인하고 대장을 불러오는 중입니다.', 'info');
     try {
-      await ensureXlsx();
+      ensureXlsx();
       const XlsxPopulate = await ensureXlsxPopulate();
       const source = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const unlocked = await XlsxPopulate.fromDataAsync(source, { password });
@@ -1082,11 +1115,19 @@
       const decryptedBuffer = typeof decryptedBlob.arrayBuffer === 'function'
         ? await decryptedBlob.arrayBuffer()
         : await new Response(decryptedBlob).arrayBuffer();
+      if (request !== uploadSequence) return;
       const workbook = parseWorkbookBuffer(decryptedBuffer);
-      processWorkbook(workbook, file.name);
+      try {
+        processWorkbook(workbook, file.name, true);
+      } catch (error) {
+        closePasswordDialog(true);
+        showUploadError(friendlyWorkbookError(error));
+        return;
+      }
       closePasswordDialog(false);
       resetProtectedWorkbookState();
     } catch (error) {
+      if (request !== uploadSequence) return;
       const rawMessage = String(error?.message || error || '');
       const message = rawMessage.toLowerCase();
       const loaderError = /인터넷 연결|연결 시간이 초과|기능을 확인/.test(rawMessage);
@@ -1104,15 +1145,12 @@
         setPasswordStatus('이 Excel 파일의 암호화 방식은 현재 지원하지 않습니다. Excel에서 암호를 해제한 .xlsx 복사본으로 다시 시도해 주세요.');
       } else {
         passwordFailureCount += 1;
-        console.warn('[암호화 Excel] 파일 열기 실패:', rawMessage);
         if (passwordFailureCount <= 2) {
           setPasswordStatus('암호가 올바르지 않습니다. 파일의 암호를 다시 확인해 주세요.');
         } else {
           setPasswordStatus('파일을 열지 못했습니다. 암호를 다시 확인해 주세요. 계속 열리지 않는 경우 이 파일의 암호화 방식이 지원되지 않을 수 있습니다.');
         }
       }
-    } finally {
-      // password 변수는 이 함수의 실행이 끝나면 더 이상 보관하지 않는다.
     }
   }
 
@@ -1131,32 +1169,44 @@
   }
 
   function detectWorkbookLayout(workbook) {
-    let best = null;
-    workbook.SheetNames.forEach(sheetName => {
+    const date1904 = Boolean(workbook.Workbook?.WBProps?.date1904);
+    const mappers = { general: mapGeneralRow, teacher: mapTeacherRow, instructor: mapInstructorRow };
+    return workbook.SheetNames.flatMap(sheetName => {
       const sheet = workbook.Sheets[sheetName];
-      const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true, blankrows: false });
-      const limit = Math.min(matrix.length, 14);
-      for (let rowIndex = 0; rowIndex < limit; rowIndex += 1) {
+      if (!sheet?.['!ref']) return [];
+      const firstRow = XLSX.utils.decode_range(sheet['!ref']).s.r + 1;
+      const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true, blankrows: true });
+      let best = null;
+      for (let rowIndex = 0; rowIndex < Math.min(matrix.length, 14); rowIndex += 1) {
         const headers = matrix[rowIndex].map(value => text(value));
         const normalized = headers.map(normalizeHeader);
-        const candidates = ['instructor', 'teacher', 'general'].map(type => ({ type, score: scoreHeaders(normalized, type) }));
-        candidates.sort((a, b) => b.score - a.score);
-        const candidate = candidates[0];
-        const sheetBonus = candidate.type === 'instructor' && normalizeHeader(sheetName).includes('시간강사입력') ? 3 : 0;
-        const score = candidate.score + sheetBonus;
-        const threshold = candidate.type === 'instructor' ? 12 : candidate.type === 'teacher' ? 10 : 7;
-        if (score < threshold || (best && score <= best.score)) continue;
-        const rows = matrix.slice(rowIndex + 1)
-          .map((row, dataIndex) => ({ row, sourceRow: rowIndex + dataIndex + 2 }))
-          .filter(item => item.row.some(value => text(value) !== ''))
-          .map(item => ({
-            ...Object.fromEntries(headers.map((header, index) => [header || `열${index + 1}`, item.row[index] ?? ''])),
-            __sourceRow: item.sourceRow
-          }));
-        best = { type: candidate.type, score, sheetName, headerRow: rowIndex, rows };
+        const thresholds = { instructor: 12, teacher: 10, general: 7 };
+        const candidates = Object.entries(thresholds).map(([type, minimum]) => {
+          const bonus = type === 'instructor' && normalizeHeader(sheetName).includes('시간강사입력') ? 3 : 0;
+          return { type, minimum, score: scoreHeaders(normalized, type) + bonus };
+        });
+        const candidate = candidates.filter(entry => entry.score >= entry.minimum).sort((a, b) => b.score - a.score)[0];
+        if (!candidate || (best && candidate.score <= best.score)) continue;
+        best = { ...candidate, headers, rowIndex };
       }
+      if (!best) return [];
+      const { type, headers, rowIndex } = best;
+      const rows = matrix.slice(rowIndex + 1).flatMap((cells, index) => {
+        const raw = Object.fromEntries(headers.map((header, col) => [header || `열${col + 1}`, cells[col] ?? '']));
+        if (isTemplateExampleRow(raw)) return [];
+        const row = mappers[type](raw);
+        if (isUnusedPreparationRow(row)) return [];
+        for (const field of ['start', 'end', 'appointmentDate', 'identity']) {
+          const value = row[field];
+          if (typeof value !== 'number') continue;
+          if (field === 'identity' && /^(?:\d{6}|\d{8}|\d{13})$/.test(String(value))) continue;
+          const date = parseDateStrict(value, date1904);
+          if (date) row[field] = dateToInput(date);
+        }
+        return [{ ...row, __sourceRow: firstRow + rowIndex + index + 1, __sourceSheet: sheetName }];
+      });
+      return rows.length ? [{ type, rows }] : [];
     });
-    return best;
   }
 
   function scoreHeaders(headers, type) {
@@ -1235,7 +1285,7 @@
   }
 
   function normalizedRowMap(row) {
-    const map = {};
+    const map = Object.create(null);
     Object.entries(row).forEach(([key, value]) => { map[normalizeHeader(key)] = value; });
     return map;
   }
@@ -1259,8 +1309,15 @@
     return !hasPerson && !hasTimeline;
   }
 
-  function loadRows(rows, fileName, ledgerType) {
+  function loadRows(rows, fileName, ledgerType, protectedWorkbook = false) {
+    uploadSequence += 1;
+    closePasswordDialog(true);
+    clearUploadError();
+    els.personSearch.value = '';
+    els.ledgerSearch.value = '';
+    els.issueFilter.selectedIndex = 0;
     state.fileName = fileName;
+    state.protectedWorkbook = protectedWorkbook;
     state.ledgerType = ledgerType;
     state.certificateMode = ['teacher', 'instructor'].includes(ledgerType) ? ledgerType : 'general';
     state.rrnDisplay = false;
@@ -1307,6 +1364,7 @@
     return {
       id: `record-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
       sourceIndex: Number(row.__sourceRow) || index + 2,
+      sourceSheet: row.__sourceSheet || '',
       ledgerType,
       recordKind: isFollowUpEvent ? 'followup' : 'career',
       followUpStatus: isFollowUpEvent ? 'pending' : '',
@@ -1386,11 +1444,12 @@
   }
 
   function findFollowUpCandidates(eventRecord, followUpDate) {
-    if (!eventRecord || !followUpDate || !eventRecord.name) return [];
+    if (!eventRecord?.birth || !followUpDate || !eventRecord.name) return [];
     return state.records.filter(record => {
       if (record.recordKind !== 'career' || record.id === eventRecord.id || record.name !== eventRecord.name) return false;
       if (record.followUpStatus === 'linked') return false;
-      if (eventRecord.birth && record.birth && eventRecord.birth !== record.birth) return false;
+      if (eventRecord.birth !== record.birth) return false;
+      if (eventRecord.rrn && record.rrn && eventRecord.rrn !== record.rrn) return false;
       if (!record.startDate || !record.endDate) return false;
       return followUpDate >= record.startDate && followUpDate <= record.endDate;
     }).sort((a, b) => {
@@ -1476,6 +1535,7 @@
     const target = eventRecord ? state.records.find(record => record.id === eventRecord.followUpCandidateId) : null;
     if (!eventRecord || !target || !eventRecord.followUpDate) return toast('연결할 경력을 확인해 주세요.', true);
     if (!eventRecord.followUpText) return toast('퇴직사유를 먼저 확인해 주세요.', true);
+    const automaticRetirement = $('field-retirement').value === getAutomaticRetirement();
 
     if (!target.originalEndDate) {
       target.originalEndDate = target.endDate ? new Date(target.endDate) : null;
@@ -1498,6 +1558,7 @@
     eventRecord.followUpReasonRequired = false;
     state.selectedRecordIds.delete(eventRecord.id);
     analyzeRecords();
+    if (automaticRetirement) updateRetirementFromSelection();
     renderAll();
     toast(`${formatDateNatural(eventRecord.followUpDate)} ${eventRecord.followUpText}을 경력에 반영했습니다.`);
   }
@@ -1519,6 +1580,7 @@
   function undoAppliedFollowUp(recordId) {
     const target = state.records.find(record => record.id === recordId);
     if (!target?.followUpApplied) return;
+    const automaticRetirement = $('field-retirement').value === getAutomaticRetirement();
     const eventRecord = state.records.find(record => record.id === target.followUpApplied.eventId);
     if (target.originalEndDate) {
       target.endDate = new Date(target.originalEndDate);
@@ -1533,8 +1595,8 @@
       eventRecord.followUpStatus = 'pending';
       eventRecord.linkedCareerId = '';
     }
-    refreshFollowUpCandidates();
     analyzeRecords();
+    if (automaticRetirement) updateRetirementFromSelection();
     renderAll();
     toast('후속 발령 반영을 되돌렸습니다.');
   }
@@ -1615,22 +1677,24 @@
         if (seen.has(key)) {
           const original = seen.get(key);
           record.duplicateOfId = original.id;
-          record.issues.push(issue('error', `대장 ${original.sourceIndex}행과 완전히 같은 경력입니다. 중복 자료를 정리해 주세요.`, 'edit-start'));
+          record.issues.push(issue('error', `대장 ${original.sourceSheet ? `‘${original.sourceSheet}’ ` : ''}${original.sourceIndex}행과 완전히 같은 경력입니다. 중복 자료를 정리해 주세요.`, 'edit-start'));
         } else {
           seen.set(key, record);
         }
       });
 
       const valid = records
-        .filter(record => record.recordKind !== 'followup' && !record.duplicateOfId && record.startDate && record.endDate)
+        .filter(record => record.recordKind !== 'followup' && !record.duplicateOfId && record.startDate && record.endDate && record.startDate <= record.endDate)
         .sort((a, b) => a.startDate - b.startDate || a.endDate - b.endDate);
-      valid.forEach((record, index) => {
-        const previous = valid[index - 1];
-        if (previous && record.startDate <= previous.endDate) {
-          const overlapDays = diffDays(record.startDate, addDays(previous.endDate, 1));
-          record.issues.push(issue('error', `앞 경력과 근무기간이 ${Math.max(1, overlapDays)}일 겹칩니다. 원 대장을 확인해 주세요.`, 'edit-start'));
+      let latestEnding = null;
+      for (const record of valid) {
+        if (latestEnding && record.startDate <= latestEnding.endDate) {
+          const overlapEnd = record.endDate < latestEnding.endDate ? record.endDate : latestEnding.endDate;
+          const overlapDays = diffDays(record.startDate, addDays(overlapEnd, 1));
+          record.issues.push(issue('error', `앞 경력과 근무기간이 ${overlapDays}일 겹칩니다. 원 대장을 확인해 주세요.`, 'edit-start'));
         }
-      });
+        if (!latestEnding || record.endDate > latestEnding.endDate) latestEnding = record;
+      }
 
       const rrns = new Set(records.map(record => record.rrn).filter(Boolean));
       if (rrns.size > 1) records.forEach(record => record.issues.push(issue('error', '같은 대상자에게 서로 다른 주민등록번호가 입력되어 있습니다.', 'edit-id-value')));
@@ -1658,6 +1722,8 @@
       const issueRecords = [...careerRecords, ...pendingEvents];
       return {
         key,
+        uiId: records[0].id,
+        sourceLabel: records[0].sourceSheet ? `${records[0].sourceSheet} ${records[0].sourceIndex}행` : `대장 ${records[0].sourceIndex}행`,
         name: records[0].name,
         birth: records.find(record => record.birth)?.birth || '',
         rrn: records.find(record => record.rrn)?.rrn || '',
@@ -1678,9 +1744,14 @@
   }
 
   function pruneSelections() {
-    const validIds = new Set(state.records.map(record => record.id));
+    const person = getSelectedPerson();
+    const validIds = new Set(person?.records.map(record => record.id));
     [...state.selectedRecordIds].forEach(id => { if (!validIds.has(id)) state.selectedRecordIds.delete(id); });
-    if (state.selectedPersonKey && !state.people.some(person => person.key === state.selectedPersonKey)) state.selectedPersonKey = null;
+    if (!person && state.selectedPersonKey) {
+      state.selectedPersonKey = null;
+      state.vacationOptions.clear();
+      clearIssueFields(true);
+    }
   }
 
   function renderAll() {
@@ -1774,17 +1845,21 @@
     const people = state.people.filter(person => normalizeSearch(`${person.name} ${person.birth}`).includes(term));
     els.personList.className = 'person-list';
     els.personList.innerHTML = people.length ? people.map(person => `
-      <button class="person-card ${person.key === state.selectedPersonKey ? 'is-active' : ''}" data-person-key="${escapeAttr(person.key)}" type="button">
-        <span class="person-main"><strong>${escapeHtml(person.name)}</strong><small>${person.birth ? formatDate(parseDateStrict(person.birth)) : '생년월일 직접 입력'}</small></span>
+      <button class="person-card ${person.key === state.selectedPersonKey ? 'is-active' : ''}" data-person-id="${escapeAttr(person.uiId)}" type="button">
+        <span class="person-main"><strong>${escapeHtml(person.name)}</strong><small>${person.birth ? formatDate(parseDateStrict(person.birth)) : `생년월일 직접 입력 · ${escapeHtml(person.sourceLabel)}`}</small></span>
         <span class="person-meta">경력 ${person.records.length}건${person.pendingEvents?.length ? `<br><span class="followup-meta">후속발령 ${person.pendingEvents.length}건</span>` : `<br>${person.errorCount ? `<span class="has-error">오류 ${person.errorCount}</span>` : person.warningCount ? `확인 ${person.warningCount}` : !person.birth ? '<span class="needs-input">입력 필요</span>' : '정상'}`}</span>
       </button>`).join('') : '<div class="empty-state small"><p>검색 결과가 없습니다.</p></div>';
-    els.personList.querySelectorAll('[data-person-key]').forEach(button => button.addEventListener('click', () => selectPerson(button.dataset.personKey)));
+    els.personList.querySelectorAll('[data-person-id]').forEach(button => button.addEventListener('click', () => {
+      const person = state.people.find(item => item.uiId === button.dataset.personId);
+      if (person) selectPerson(person.key);
+    }));
   }
 
   function selectPerson(key) {
-    const personChanged = state.selectedPersonKey !== key;
+    if (state.selectedPersonKey === key) return;
     state.selectedPersonKey = key;
-    if (personChanged) state.vacationOptions.clear();
+    state.vacationOptions.clear();
+    clearIssueFields(true);
     state.selectedRecordIds.clear();
     state.warningAcknowledged = false;
     state.rrnDisplay = false;
@@ -1794,7 +1869,6 @@
       person.records.filter(record => !hasError(record) && !hasWarning(record)).forEach(record => state.selectedRecordIds.add(record.id));
       $('field-name').value = person.name;
       $('field-birth').value = person.birth || '';
-      syncRrnInputFromSelectedPerson();
       updateRetirementFromSelection();
     }
     renderPeople();
@@ -2018,8 +2092,12 @@
   }
 
   function updateRetirementFromSelection() {
-    const latest = [...getSelectedRecords()].sort(compareLatest).at(-1);
-    $('field-retirement').value = latest?.retirement || (['teacher', 'instructor'].includes(state.ledgerType) && latest?.endDate ? '계약기간 만료' : '');
+    $('field-retirement').value = getAutomaticRetirement();
+  }
+
+  function getAutomaticRetirement() {
+    const latest = getSelectedRecords().sort(compareLatest).at(-1);
+    return latest?.retirement || (['teacher', 'instructor'].includes(state.ledgerType) && latest?.endDate ? '계약기간 만료' : '');
   }
 
   function createVacationPeriod() {
@@ -2439,6 +2517,11 @@
     const pages = [buildMainCertificate(selected, capacity, total, referenceMap)];
     appendixChunks.forEach((records, index) => pages.push(buildAppendixPage(records, index + 1, appendixChunks.length, appendixCapacity, referenceMap)));
     $('certificate-pages').innerHTML = pages.join('');
+    updatePrintStatus();
+    scheduleCertificatePageFit();
+  }
+
+  function updatePrintStatus() {
     const printStatus = getPrintBlockingStatus();
     const printButton = $('print-certificate');
     printButton.disabled = !printStatus.ok;
@@ -2448,7 +2531,6 @@
       blockMessage.textContent = printStatus.ok ? '발급 준비가 완료되었습니다.' : printStatus.message;
       blockMessage.classList.toggle('ready', printStatus.ok);
     }
-    scheduleCertificatePageFit();
   }
 
   function scheduleCertificatePageFit() {
@@ -2456,6 +2538,7 @@
     certificateFitFrame = window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
         fitMainCertificateToA4();
+        updatePrintStatus();
         schedulePreviewFit();
       });
     });
@@ -2464,6 +2547,14 @@
   function fitMainCertificateToA4() {
     const page = $('certificate-pages')?.querySelector('.certificate--main');
     if (!page || !page.clientHeight) return;
+    qsa('#certificate-pages .appendix-page').forEach(appendix => {
+      const footer = appendix.querySelector('.appendix-footer');
+      const padding = Number.parseFloat(window.getComputedStyle(appendix).paddingBottom) || 0;
+      const pageBounds = appendix.getBoundingClientRect();
+      const scale = pageBounds.height / appendix.offsetHeight;
+      const usedHeight = (footer.getBoundingClientRect().bottom - pageBounds.top) / scale;
+      appendix.dataset.a4Fit = usedHeight + padding > appendix.clientHeight + 1 ? 'overflow' : 'normal';
+    });
 
     const body = page.querySelector('.certificate-body');
     const footer = page.querySelector('.certificate-footer');
@@ -2698,16 +2789,19 @@
   function getPrintBlockingStatus() {
     const selected = getSelectedRecords();
     if (!selected.length) return { ok: false, message: '발급할 정상 경력을 한 건 이상 선택해 주세요.' };
-    if (!$('field-name').value.trim()) return { ok: false, message: '성명을 입력해 주세요.' };
-    if (!parseBirthDateInput($('field-birth').value)) return { ok: false, message: '생년월일을 확인해 주세요.' };
+    const person = getSelectedPerson();
+    const birth = parseBirthDateInput($('field-birth').value);
+    if (!person || $('field-name').value.trim() !== person.name) return { ok: false, message: '발급 성명이 선택한 대상자와 일치해야 합니다. 수정은 대장 점검에서 진행해 주세요.' };
+    if (!birth) return { ok: false, message: '생년월일을 확인해 주세요.' };
+    if (person.birth && dateToInput(birth) !== person.birth) return { ok: false, message: '발급 생년월일이 선택한 대상자와 일치해야 합니다.' };
     if (!parseDateStrict($('field-issue-date').value)) return { ok: false, message: '발급일을 확인해 주세요.' };
     if (state.rrnDisplay) {
       const rawRrn = $('field-rrn').value.trim();
       const parsedRrn = parseIdentity(rawRrn);
       if (!rawRrn) return { ok: false, message: '출력할 주민등록번호를 입력해 주세요.' };
       if (parsedRrn.kind !== 'rrn') return { ok: false, message: '주민등록번호 형식을 확인해 주세요.' };
-      const birth = parseBirthDateInput($('field-birth').value);
-      if (birth && dateToInput(parsedRrn.birth) !== dateToInput(birth)) return { ok: false, message: '주민등록번호 앞 6자리와 생년월일이 일치하지 않습니다.' };
+      if (person.rrn && parsedRrn.rrn !== person.rrn) return { ok: false, message: '대장에 기재된 주민등록번호와 일치해야 합니다.' };
+      if (dateToInput(parsedRrn.birth) !== dateToInput(birth)) return { ok: false, message: '주민등록번호 앞 6자리와 생년월일이 일치하지 않습니다.' };
     }
     if (state.certificateMode === 'hours' && selected.some(record => !record.hours)) return { ok: false, message: '선택한 경력 중 소정근로시간이 입력되지 않은 자료가 있습니다.' };
     const instructorWithoutWeeklyHours = selected.find(record => record.ledgerType === 'instructor' && isHourlyInstructor(record) && record.weeklyHours === null);
@@ -2721,12 +2815,19 @@
     for (const [type, [label, fields]] of Object.entries(historySpecs)) {
       const incomplete = state.historyEntries[type].find(entry => fields.some(field => !text(entry[field])));
       if (incomplete) return { ok: false, message: `${label} 사항의 연월일과 내용을 모두 입력해 주세요.` };
+      if (state.historyEntries[type].some(entry => !parseDateStrict(entry.date))) {
+        return { ok: false, message: `${label} 사항의 연월일을 확인해 주세요.` };
+      }
     }
 
     const unresolvedFollowUp = getPendingFollowUpEvents().find(eventRecord => eventRecord.followUpCandidateId && state.selectedRecordIds.has(eventRecord.followUpCandidateId));
     if (unresolvedFollowUp) {
       const dateLabel = unresolvedFollowUp.followUpDate ? formatDateNatural(unresolvedFollowUp.followUpDate) : '날짜 미확인';
       return { ok: false, message: `${dateLabel} 퇴직 발령 가능성을 먼저 확인해 주세요.`, followUpId: unresolvedFollowUp.id };
+    }
+
+    if ($('certificate-pages').querySelector('[data-a4-fit$="overflow"]')) {
+      return { ok: false, message: '입력한 내용이 A4 한 페이지를 넘어갑니다. 긴 입력값이나 선택한 경력을 조정한 뒤 미리보기를 확인해 주세요.' };
     }
 
     const vacationError = selected.flatMap(record => validateVacationOption(record)).at(0);
@@ -2749,6 +2850,11 @@
 
   function printCertificateOnly() {
     fitMainCertificateToA4();
+    const status = getPrintBlockingStatus();
+    if (!status.ok) {
+      updatePrintStatus();
+      return toast(status.message, true);
+    }
     const pages = $('certificate-pages');
     if (!pages?.children.length) return toast('인쇄할 증명서를 찾지 못했습니다.', true);
 
@@ -2756,23 +2862,13 @@
     printFrame.setAttribute('title', '경력증명서 인쇄');
     printFrame.setAttribute('aria-hidden', 'true');
     Object.assign(printFrame.style, { position: 'fixed', right: '0', bottom: '0', width: '0', height: '0', border: '0', visibility: 'hidden' });
-    document.body.appendChild(printFrame);
-
-    const printDocument = printFrame.contentDocument || printFrame.contentWindow?.document;
-    if (!printDocument) {
-      printFrame.remove();
-      return toast('인쇄 화면을 열지 못했습니다.', true);
-    }
-
     const stylesheetUrl = new URL('styles.css', document.baseURI).href;
-    printDocument.open();
-    printDocument.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><title></title><link rel="stylesheet" href="${stylesheetUrl}"><style>
+    printFrame.srcdoc = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title></title><link rel="stylesheet" href="${stylesheetUrl}"><style>
       @page{size:A4 portrait;margin:0}html,body{width:210mm!important;min-width:0!important;margin:0!important;padding:0!important;background:#fff!important;overflow:visible!important}.certificate-pages{display:block!important;position:static!important;left:auto!important;top:auto!important;width:210mm!important;height:auto!important;transform:none!important}.certificate{display:block!important;width:210mm!important;height:297mm!important;min-height:297mm!important;margin:0!important;box-shadow:none!important;break-after:page!important;page-break-after:always!important}.certificate:last-child{break-after:auto!important;page-break-after:auto!important}
-    </style></head><body>${pages.outerHTML}</body></html>`);
-    printDocument.close();
+    </style></head><body>${pages.outerHTML}</body></html>`;
 
     const cleanUp = () => window.setTimeout(() => printFrame.remove(), 300);
-    printFrame.onload = () => window.setTimeout(() => {
+    printFrame.addEventListener('load', () => {
       const printWindow = printFrame.contentWindow;
       if (!printWindow) return cleanUp();
       printWindow.addEventListener('afterprint', cleanUp, { once: true });
@@ -2780,7 +2876,8 @@
       printWindow.print();
       toast('공용 PC에서는 발급 후 ‘대장 비우기’를 눌러 주세요.');
       window.setTimeout(cleanUp, 3000);
-    }, 300);
+    }, { once: true });
+    document.body.appendChild(printFrame);
   }
 
   function openEditDialog(index, focusFieldId = '') {
@@ -2878,9 +2975,11 @@
     window.setTimeout(() => field.focus({ preventScroll: true }), 220);
   }
 
-  async function exportLedger() {
+  async function exportLedger(password = '') {
     if (!state.records.length) return toast('내려받을 대장이 없습니다.', true);
-    try { await ensureXlsx(); } catch (error) { return toast(error.message, true); }
+    if (state.protectedWorkbook && !password) return toast('수정 대장을 저장할 암호를 입력해 주세요.', true);
+    try { ensureXlsx(); } catch (error) { return toast(error.message, true); }
+    const request = uploadSequence;
     const exportRecords = state.records.filter(record => record.followUpStatus !== 'linked');
     let rows;
     let filePrefix;
@@ -2943,12 +3042,37 @@
       sheetName = '발령대장_입력';
       widths = [12, 24, 14, 22, 16, 14, 14, 18, 18, 34, 38, 50];
     }
-    const sheet = XLSX.utils.json_to_sheet(rows);
-    sheet['!cols'] = widths.map(wch => ({ wch }));
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, sheet, sheetName);
-    XLSX.writeFile(workbook, `${filePrefix}_${dateToInput(new Date()).replaceAll('-', '')}.xlsx`);
-    toast('수정 대장을 내려받았습니다.');
+    const filename = `${filePrefix}_${dateToInput(new Date()).replaceAll('-', '')}.xlsx`;
+    try {
+      if (password) {
+        const XlsxPopulate = await ensureXlsxPopulate();
+        const output = await XlsxPopulate.fromBlankAsync();
+        const outputSheet = output.sheet(0).name(sheetName);
+        outputSheet.cell('A1').value([Object.keys(rows[0]), ...rows.map(row => Object.values(row))]);
+        widths.forEach((width, index) => outputSheet.column(index + 1).width(width));
+        const blob = await output.outputAsync({ password, type: 'blob' });
+        if (request !== uploadSequence || !$('export-password-dialog').open) return false;
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } else {
+        const sheet = XLSX.utils.json_to_sheet(rows);
+        sheet['!cols'] = widths.map(wch => ({ wch }));
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, sheet, sheetName);
+        XLSX.writeFile(workbook, filename);
+      }
+      toast(password ? '암호화한 수정 대장을 내려받았습니다.' : '수정 대장을 내려받았습니다.');
+      return true;
+    } catch {
+      toast('수정 대장을 저장하지 못했습니다. 다시 시도해 주세요.', true);
+      return false;
+    }
   }
 
   function openClearDataDialog() {
@@ -2959,6 +3083,11 @@
   }
 
   function clearData() {
+    uploadSequence += 1;
+    els.personSearch.value = '';
+    els.ledgerSearch.value = '';
+    els.issueFilter.selectedIndex = 0;
+    state.protectedWorkbook = false;
     state.records = [];
     state.people = [];
     state.fileName = '';
@@ -2973,6 +3102,10 @@
     resetProtectedWorkbookState();
     closePasswordDialog(false);
     clearUploadError();
+    els.editForm.reset();
+    els.editIssues.replaceChildren();
+    $('export-password-dialog').close();
+    qsa('iframe[title="경력증명서 인쇄"]').forEach(frame => frame.remove());
     clearIssueFields(true);
     renderAll();
     toast('불러온 대장을 비웠습니다.');
@@ -3018,7 +3151,7 @@
   function personKey(record) {
     if (record.rrn) return `rrn|${record.rrn.replace(/\D/g, '')}`;
     if (record.birth) return `birth|${record.name.trim()}|${record.birth}`;
-    return `name|${record.name.trim()}`;
+    return `row|${record.id}`;
   }
 
   function groupRecordsByPerson(records) {
@@ -3039,9 +3172,7 @@
       (groups[key] ||= []).push(record);
     });
     records.filter(record => !record.rrn && !record.birth).forEach(record => {
-      const matchingKeys = Object.keys(groups).filter(key => groups[key][0]?.name === record.name);
-      const key = matchingKeys.length === 1 ? matchingKeys[0] : personKey(record);
-      (groups[key] ||= []).push(record);
+      groups[personKey(record)] = [record];
     });
     return groups;
   }
@@ -3126,7 +3257,7 @@
     return `${digits.slice(0, 6)}-${digits.slice(6)}`;
   }
 
-  function parseDateStrict(value) {
+  function parseDateStrict(value, date1904 = false) {
     if (value === null || value === undefined || value === '') return null;
     if (value instanceof Date && !Number.isNaN(value.valueOf())) return new Date(value.getFullYear(), value.getMonth(), value.getDate());
     if (typeof value === 'number' && Number.isFinite(value)) {
@@ -3135,8 +3266,8 @@
         return strictDate(Number(numericText.slice(0, 4)), Number(numericText.slice(4, 6)), Number(numericText.slice(6, 8)));
       }
       if (window.XLSX?.SSF?.parse_date_code) {
-        const parsed = XLSX.SSF.parse_date_code(value);
-        if (parsed) return strictDate(parsed.y, parsed.m, parsed.d);
+        const parsed = XLSX.SSF.parse_date_code(value, { date1904 });
+        return parsed ? strictDate(parsed.y, parsed.m, parsed.d) : null;
       }
       const epoch = new Date(Date.UTC(1899, 11, 30));
       const date = new Date(epoch.getTime() + Math.round(value) * 86400000);

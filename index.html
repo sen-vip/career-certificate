@@ -4,11 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#0f172a" />
-  <title>경력증명 자동화 v0.7.15</title>
+  <title>경력증명 자동화 v0.7.16</title>
   <link rel="icon" type="image/png" href="./favicon.png" />
   <link rel="stylesheet" href="styles.css" />
-  <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script defer src="app.js"></script>
+  <script defer src="vendor/xlsx.full.min.js"></script>
+  <script defer src="app.js?v=0.7.16"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -23,7 +23,7 @@
       <div class="header-actions">
         <span class="privacy-badge" title="업로드한 자료는 현재 브라우저 안에서만 처리됩니다."><span class="dot"></span>외부 전송 없이 처리</span>
         <button id="open-help" class="help-button" type="button">도움말</button>
-        <span class="version-meta" aria-label="현재 버전 v0.7.15">v0.7.15</span>
+        <span class="version-meta" aria-label="현재 버전 v0.7.16">v0.7.16</span>
       </div>
     </header>
 
@@ -140,7 +140,7 @@
                 <div class="vacation-section-heading">
                   <div>
                     <span class="field-caption">경력별 방학기간 표시</span>
-                    <p class="field-help"><strong>선택한 경력마다 별도로 설정합니다.</strong> 다른 경력의 방학은 ‘방학기간 추가’가 아니라 아래의 다음 경력 카드에 입력하세요.</p>
+                    <p class="field-help"><strong>선택한 경력마다 별도로 설정합니다.</strong> 다른 경력의 방학은 해당 경력 카드에 입력하세요. 방학기간 입력값은 증명서에 표시되며 근무연한 계산에는 반영되지 않습니다.</p>
                   </div>
                   <span class="temporary-chip">이번 발급에만 적용</span>
                 </div>
@@ -388,6 +388,31 @@
       <div class="dialog-actions password-actions">
         <button class="btn ghost" type="button" data-close-password>취소</button>
         <button id="unlock-workbook" class="btn primary" type="submit">대장 불러오기</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="export-password-dialog" class="password-dialog" aria-labelledby="export-password-title">
+    <form id="export-password-form" class="password-shell" autocomplete="off">
+      <div class="dialog-heading password-heading">
+        <div>
+          <h2 id="export-password-title">수정 대장을 암호화하여 저장</h2>
+          <p>수정 대장에 적용할 암호를 입력해 주세요. 원본과 다른 암호를 사용할 수 있습니다.</p>
+        </div>
+      </div>
+      <div class="dialog-body password-body">
+        <label class="password-field" for="export-password">
+          <span>저장할 파일 암호</span>
+          <span class="password-input-wrap"><input id="export-password" type="password" autocomplete="new-password" required autofocus /></span>
+        </label>
+        <label class="password-field" for="export-password-confirm">
+          <span>저장할 파일 암호 확인</span>
+          <span class="password-input-wrap"><input id="export-password-confirm" type="password" autocomplete="new-password" required /></span>
+        </label>
+      </div>
+      <div class="dialog-actions password-actions">
+        <button class="btn ghost" type="button" id="cancel-export-password">취소</button>
+        <button id="export-password-submit" class="btn primary" type="submit">암호화하여 내려받기</button>
       </div>
     </form>
   </dialog>
